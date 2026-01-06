@@ -1,0 +1,271 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USERS & HOUSEHOLDS ====================
+
+model User {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  name       String
+  avatarUrl  String?
+  provider   String   // google, apple
+  providerId String
+  createdAt  DateTime @default(now())
+
+  householdMembers HouseholdMember[]
+  boardItems       BoardItem[]
+  expenses         Expense[]
+  expenseSplits    ExpenseSplit[]
+  wishlistItems    WishlistItem[]
+  calendarEvents   CalendarEvent[]
+  invitesCreated   HouseholdInvite[] @relation("InvitesCreated")
+  invitesUsed      HouseholdInvite[] @relation("InvitesUsed")
+
+  @@unique([provider, providerId])
+}
+
+model Household {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  members            HouseholdMember[]
+  invites            HouseholdInvite[]
+  boards             Board[]
+  recipes            Recipe[]
+  menuPlans          MenuPlan[]
+  expenseCategories  ExpenseCategory[]
+  expenses           Expense[]
+  wishlistCategories WishlistCategory[]
+  wishlistItems      WishlistItem[]
+  calendarEvents     CalendarEvent[]
+}
+
+model HouseholdMember {
+  id          String   @id @default(uuid())
+  householdId String
+  userId      String
+  role        String   @default("member") // owner, member
+  income      Decimal? @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, userId])
+}
+
+model HouseholdInvite {
+  id          String    @id @default(uuid())
+  householdId String
+  code        String    @unique
+  createdById String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  usedById    String?
+  createdAt   DateTime  @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("InvitesCreated", fields: [createdById], references: [id])
+  usedBy    User?     @relation("InvitesUsed", fields: [usedById], references: [id])
+}
+
+// ==================== BOARDS (Pinterest-style) ====================
+
+model Board {
+  id          String   @id @default(uuid())
+  householdId String
+  name        String
+  coverUrl    String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  items          BoardItem[]
+  calendarEvents CalendarEvent[]
+}
+
+model BoardItem {
+  id                   String   @id @default(uuid())
+  boardId              String
+  type                 String   // link, photo
+  url                  String   // external URL for links, Tigris URL for photos
+  thumbnailUrl         String?
+  title                String?
+  description          String?
+  linkPreviewImage     String?  // auto-fetched og:image for links
+  photoBackDrawingUrl  String?  // for photo flip side
+  photoBackText        String?
+  photoBackDate        DateTime?
+  photoBackPlace       String?
+  createdById          String
+  createdAt            DateTime @default(now())
+
+  board     Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  createdBy User  @relation(fields: [createdById], references: [id])
+}
+
+// ==================== RECIPE BOOK ====================
+
+model Recipe {
+  id           String   @id @default(uuid())
+  householdId  String
+  title        String
+  ingredients  Json     // array of { name, quantity, unit }
+  instructions Json     // array of steps
+  imageUrl     String?
+  servings     Int?
+  sourceUrl    String?
+  season       String?  // spring, summer, fall, winter
+  createdAt    DateTime @default(now())
+
+  household     Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  menuItems     MenuItem[]
+  wishlistItems WishlistItem[]
+  calendarEvents CalendarEvent[]
+}
+
+model SeasonalVegetable {
+  id         String @id @default(uuid())
+  name       String
+  season     String // spring, summer, fall, winter
+  priceLevel String // cheap, normal, expensive
+
+  @@unique([name, season])
+}
+
+// ==================== MENU PLANNER ====================
+
+model MenuPlan {
+  id            String   @id @default(uuid())
+  householdId   String
+  weekStartDate DateTime
+  createdAt     DateTime @default(now())
+
+  household Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  items     MenuItem[]
+}
+
+model MenuItem {
+  id         String   @id @default(uuid())
+  menuPlanId String
+  recipeId   String
+  dayOfWeek  Int      // 0-6 (Sunday-Saturday)
+  mealType   String   // breakfast, lunch, dinner, snack
+  createdAt  DateTime @default(now())
+
+  menuPlan MenuPlan @relation(fields: [menuPlanId], references: [id], onDelete: Cascade)
+  recipe   Recipe   @relation(fields: [recipeId], references: [id])
+}
+
+// ==================== EXPENSE SPLITTER ====================
+
+model ExpenseCategory {
+  id          String @id @default(uuid())
+  householdId String
+  name        String
+  icon        String?
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  expenses  Expense[]
+
+  @@unique([householdId, name])
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  householdId String
+  description String
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    String   @default("ARS")
+  receiptUrl  String?
+  date        DateTime
+  categoryId  String?
+  paidById    String
+  createdAt   DateTime @default(now())
+
+  household Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category  ExpenseCategory? @relation(fields: [categoryId], references: [id])
+  paidBy    User             @relation(fields: [paidById], references: [id])
+  splits    ExpenseSplit[]
+}
+
+model ExpenseSplit {
+  id        String   @id @default(uuid())
+  expenseId String
+  userId    String
+  amount    Decimal  @db.Decimal(12, 2)
+  settled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([expenseId, userId])
+}
+
+// ==================== WISHLISTS ====================
+
+model WishlistCategory {
+  id          String @id @default(uuid())
+  householdId String
+  name        String // buy now, buy when we can, gift ideas
+  type        String @default("custom") // system, custom
+  sortOrder   Int    @default(0)
+
+  household Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  items     WishlistItem[]
+
+  @@unique([householdId, name])
+}
+
+model WishlistItem {
+  id             String   @id @default(uuid())
+  householdId    String
+  categoryId     String
+  ownerType      String   // personal, shared
+  userId         String?  // null if shared
+  name           String
+  url            String?
+  price          Decimal? @db.Decimal(12, 2)
+  preferenceEmoji String?
+  quantity       Decimal? @db.Decimal(10, 2)
+  unit           String?
+  checked        Boolean  @default(false)
+  sourceRecipeId String?  // if generated from menu planner
+  createdAt      DateTime @default(now())
+
+  household    Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category     WishlistCategory @relation(fields: [categoryId], references: [id])
+  user         User?            @relation(fields: [userId], references: [id])
+  sourceRecipe Recipe?          @relation(fields: [sourceRecipeId], references: [id])
+}
+
+// ==================== CALENDAR ====================
+
+model CalendarEvent {
+  id               String    @id @default(uuid())
+  householdId      String
+  title            String
+  description      String?
+  startDate        DateTime
+  endDate          DateTime?
+  allDay           Boolean   @default(false)
+  recurrence       String    @default("none") // none, daily, weekly, monthly, yearly
+  recurrenceEndDate DateTime?
+  linkedBoardId    String?
+  linkedRecipeId   String?
+  createdById      String
+  createdAt        DateTime  @default(now())
+
+  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  linkedBoard  Board?    @relation(fields: [linkedBoardId], references: [id])
+  linkedRecipe Recipe?   @relation(fields: [linkedRecipeId], references: [id])
+  createdBy    User      @relation(fields: [createdById], references: [id])
+}

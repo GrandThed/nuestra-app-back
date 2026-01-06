@@ -3,7 +3,7 @@
 ### Click "Send Request" above each request to execute
 
 @baseUrl = https://nuestra-app-back-production.up.railway.app
-@token = YOUR_JWT_TOKEN_HERE
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzZTNjMTRkMi1jZmE2LTQ1ZTctYmNkMy0zNDUwMjRlODBmYzciLCJlbWFpbCI6InRlc3R1c2VyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzY3NzE3MDg1LCJleHAiOjE3NzAxMzYyODV9.mrhFscpwz-2aJjrxidvwLA--jHtKi0uQ2ZLCZsb3h5U
 
 ### ============================================
 ### Health & Info

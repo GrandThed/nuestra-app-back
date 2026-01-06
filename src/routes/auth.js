@@ -151,7 +151,7 @@ router.get('/me', authenticate, async (req, res) => {
         email: req.user.email,
         name: req.user.name,
         avatarUrl: req.user.avatarUrl,
-        households: req.user.householdMemberships.map(m => ({
+        households: req.user.householdMembers.map(m => ({
           id: m.household.id,
           name: m.household.name,
           role: m.role

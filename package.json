@@ -4,8 +4,8 @@
   "description": "Backend API for nuestra_app - Household Hub",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "build": "prisma generate && prisma db push",
+    "start": "prisma generate && prisma db push && node src/index.js",
+    "build": "echo 'Build complete'",
     "dev": "nodemon src/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

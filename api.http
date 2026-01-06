@@ -63,7 +63,7 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "name": "Test Family"
+  "name": "Depto"
 }
 
 ### Get Household

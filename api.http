@@ -1,0 +1,318 @@
+### Household Hub API Tests
+### Install "REST Client" extension in VS Code to use this file
+### Click "Send Request" above each request to execute
+
+@baseUrl = https://nuestra-app-back-production.up.railway.app
+@token = YOUR_JWT_TOKEN_HERE
+
+### ============================================
+### Health & Info
+### ============================================
+
+### Health Check
+GET {{baseUrl}}/health
+
+### API Info
+GET {{baseUrl}}/api
+
+### ============================================
+### Authentication
+### ============================================
+
+### DEV LOGIN - Create test user and get JWT (disabled in production)
+### Use this to get a token for testing authenticated endpoints
+POST {{baseUrl}}/auth/dev-login
+Content-Type: application/json
+
+{
+  "email": "testuser@example.com",
+  "name": "Test User"
+}
+
+### Google OAuth (send token from Flutter)
+POST {{baseUrl}}/auth/google
+Content-Type: application/json
+
+{
+  "idToken": "google-id-token-from-flutter"
+}
+
+### Apple OAuth (send token from Flutter)
+POST {{baseUrl}}/auth/apple
+Content-Type: application/json
+
+{
+  "idToken": "apple-id-token-from-flutter",
+  "fullName": {
+    "givenName": "John",
+    "familyName": "Doe"
+  }
+}
+
+### Get Current User
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{token}}
+
+### ============================================
+### Households
+### ============================================
+
+### Create Household
+POST {{baseUrl}}/api/households
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Test Family"
+}
+
+### Get Household
+# @householdId = paste-household-id-here
+GET {{baseUrl}}/api/households/{{householdId}}
+Authorization: Bearer {{token}}
+
+### Generate Invite
+POST {{baseUrl}}/api/households/{{householdId}}/invite
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "expiresInDays": 7
+}
+
+### Join Household with Invite
+POST {{baseUrl}}/api/households/join
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "inviteCode": "ABC123XY"
+}
+
+### Update Member Income
+PATCH {{baseUrl}}/api/households/{{householdId}}/members/{{userId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "income": 50000.00
+}
+
+### ============================================
+### Boards
+### ============================================
+
+### List Boards
+GET {{baseUrl}}/api/boards?householdId={{householdId}}
+Authorization: Bearer {{token}}
+
+### Create Board
+POST {{baseUrl}}/api/boards
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "name": "Travel Ideas"
+}
+
+### Get Board with Items
+# @boardId = paste-board-id-here
+GET {{baseUrl}}/api/boards/{{boardId}}
+Authorization: Bearer {{token}}
+
+### Add Link to Board
+POST {{baseUrl}}/api/boards/{{boardId}}/items
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "type": "link",
+  "url": "https://example.com/article",
+  "title": "Interesting Article"
+}
+
+### Delete Board
+DELETE {{baseUrl}}/api/boards/{{boardId}}
+Authorization: Bearer {{token}}
+
+### ============================================
+### Recipes
+### ============================================
+
+### List Recipes
+GET {{baseUrl}}/api/recipes?householdId={{householdId}}
+Authorization: Bearer {{token}}
+
+### Create Recipe
+POST {{baseUrl}}/api/recipes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "title": "Pasta Carbonara",
+  "ingredients": [
+    { "name": "Spaghetti", "quantity": 400, "unit": "g" },
+    { "name": "Pancetta", "quantity": 200, "unit": "g" },
+    { "name": "Eggs", "quantity": 4, "unit": "units" }
+  ],
+  "instructions": [
+    "Boil water and cook pasta",
+    "Fry pancetta until crispy",
+    "Mix eggs with parmesan",
+    "Combine and serve"
+  ],
+  "servings": 4
+}
+
+### Get Recipe
+# @recipeId = paste-recipe-id-here
+GET {{baseUrl}}/api/recipes/{{recipeId}}
+Authorization: Bearer {{token}}
+
+### Get Seasonal Vegetables
+GET {{baseUrl}}/api/recipes/seasonal-vegetables?season=summer
+Authorization: Bearer {{token}}
+
+### ============================================
+### Menu Planner
+### ============================================
+
+### List Menu Plans
+GET {{baseUrl}}/api/menus?householdId={{householdId}}
+Authorization: Bearer {{token}}
+
+### Create Menu Plan
+POST {{baseUrl}}/api/menus
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "weekStartDate": "2024-01-15"
+}
+
+### Add Menu Item
+# @menuPlanId = paste-menu-plan-id-here
+POST {{baseUrl}}/api/menus/{{menuPlanId}}/items
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "recipeId": "{{recipeId}}",
+  "dayOfWeek": 0,
+  "mealType": "dinner"
+}
+
+### Generate Shopping List
+POST {{baseUrl}}/api/menus/{{menuPlanId}}/generate-shopping
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "servingsMultiplier": 1.0
+}
+
+### ============================================
+### Expenses
+### ============================================
+
+### List Expense Categories
+GET {{baseUrl}}/api/expenses/categories?householdId={{householdId}}
+Authorization: Bearer {{token}}
+
+### Create Expense Category
+POST {{baseUrl}}/api/expenses/categories
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "name": "Groceries",
+  "icon": "🛒"
+}
+
+### List Expenses
+GET {{baseUrl}}/api/expenses?householdId={{householdId}}&month=2024-01
+Authorization: Bearer {{token}}
+
+### Create Expense
+POST {{baseUrl}}/api/expenses
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "description": "Weekly groceries",
+  "amount": 15000.00,
+  "currency": "ARS",
+  "date": "2024-01-15",
+  "paidById": "{{userId}}"
+}
+
+### Get Expense Summary
+GET {{baseUrl}}/api/expenses/summary?householdId={{householdId}}&month=2024-01
+Authorization: Bearer {{token}}
+
+### ============================================
+### Wishlist
+### ============================================
+
+### List Wishlist Categories
+GET {{baseUrl}}/api/wishlist/categories?householdId={{householdId}}
+Authorization: Bearer {{token}}
+
+### List Wishlist Items
+GET {{baseUrl}}/api/wishlist?householdId={{householdId}}
+Authorization: Bearer {{token}}
+
+### Create Wishlist Item
+POST {{baseUrl}}/api/wishlist
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "categoryId": "{{categoryId}}",
+  "ownerType": "shared",
+  "name": "Milk",
+  "quantity": 2,
+  "unit": "liters"
+}
+
+### Toggle Checked
+# @wishlistItemId = paste-item-id-here
+PATCH {{baseUrl}}/api/wishlist/{{wishlistItemId}}/check
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "checked": true
+}
+
+### ============================================
+### Calendar
+### ============================================
+
+### List Calendar Events
+GET {{baseUrl}}/api/calendar?householdId={{householdId}}&from=2024-01-01&to=2024-01-31
+Authorization: Bearer {{token}}
+
+### Create Calendar Event
+POST {{baseUrl}}/api/calendar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "title": "Dinner with friends",
+  "startDate": "2024-01-20T19:00:00Z",
+  "endDate": "2024-01-20T22:00:00Z",
+  "allDay": false,
+  "recurrence": "none"
+}
+
+### Get Unified Timeline
+GET {{baseUrl}}/api/calendar/timeline?householdId={{householdId}}&from=2024-01-01&to=2024-01-31
+Authorization: Bearer {{token}}

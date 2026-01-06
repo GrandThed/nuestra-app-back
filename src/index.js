@@ -37,8 +37,8 @@ app.get('/api', (req, res) => {
   });
 });
 
-// Routes (to be added)
-// app.use('/auth', require('./routes/auth'));
+// Routes
+app.use('/auth', require('./routes/auth'));
 // app.use('/api/households', require('./routes/households'));
 // app.use('/api/boards', require('./routes/boards'));
 // app.use('/api/recipes', require('./routes/recipes'));

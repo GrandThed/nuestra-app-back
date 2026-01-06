@@ -40,6 +40,7 @@ app.get('/api', (req, res) => {
 // Routes
 app.use('/auth', require('./routes/auth'));
 app.use('/api/households', require('./routes/households'));
+app.use('/api/upload', require('./routes/upload'));
 // app.use('/api/boards', require('./routes/boards'));
 // app.use('/api/recipes', require('./routes/recipes'));
 // app.use('/api/menus', require('./routes/menus'));

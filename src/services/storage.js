@@ -30,15 +30,13 @@ const uploadFile = async (fileBuffer, originalName, folder, contentType) => {
     Bucket: BUCKET_NAME,
     Key: key,
     Body: fileBuffer,
-    ContentType: contentType,
-    ACL: 'public-read'
+    ContentType: contentType
   });
 
   await s3Client.send(command);
 
-  // Construct public URL
-  const endpoint = process.env.AWS_ENDPOINT_URL_S3;
-  const url = `${endpoint}/${BUCKET_NAME}/${key}`;
+  // Generate a long-lived signed URL (7 days)
+  const url = await getSignedDownloadUrl(key, 7 * 24 * 60 * 60);
 
   return { key, url };
 };

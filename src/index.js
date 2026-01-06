@@ -43,7 +43,7 @@ app.use('/api/households', require('./routes/households'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/boards', require('./routes/boards'));
 app.use('/api/recipes', require('./routes/recipes'));
-// app.use('/api/menus', require('./routes/menus'));
+app.use('/api/menus', require('./routes/menus'));
 // app.use('/api/expenses', require('./routes/expenses'));
 // app.use('/api/wishlist', require('./routes/wishlist'));
 // app.use('/api/calendar', require('./routes/calendar'));

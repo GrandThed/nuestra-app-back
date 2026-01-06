@@ -7,6 +7,12 @@
 @householdId = 7bafd89d-34ca-45c7-bc70-a7ee5f445799
 @userId = 3e3c14d2-cfa6-45e7-bcd3-345024e80fc7
 @boardId = 06486f5f-e0c5-4354-b686-172185ee43f8
+
+@menuPlanId = 1a2b3c4d-5e6f-7081-9201-112131415161
+
+@wishlistItemId = 1a2b3c4d-5e6f-7081-9201-112131415161
+
+@categoryId = 1a2b3c4d-5e6f-7081-9201-112131415161
 ### ============================================
 ### Health & Info
 ### ============================================
@@ -245,29 +251,55 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/api/menus?householdId={{householdId}}
 Authorization: Bearer {{token}}
 
-### Create Menu Plan
+### Get Current Week's Menu (auto-creates if doesn't exist)
+GET {{baseUrl}}/api/menus/current?householdId={{householdId}}
+Authorization: Bearer {{token}}
+
+### Create Menu Plan (for specific week)
 POST {{baseUrl}}/api/menus
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
   "householdId": "{{householdId}}",
-  "weekStartDate": "2024-01-15"
+  "weekStartDate": "2026-01-13"
 }
 
-### Add Menu Item
-# @menuPlanId = paste-menu-plan-id-here
+### Get Menu Plan by ID
+GET {{baseUrl}}/api/menus/{{menuPlanId}}
+Authorization: Bearer {{token}}
+
+### Delete Menu Plan
+DELETE {{baseUrl}}/api/menus/{{menuPlanId}}
+Authorization: Bearer {{token}}
+
+### Add Menu Item (recipe to day/meal)
 POST {{baseUrl}}/api/menus/{{menuPlanId}}/items
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
   "recipeId": "{{recipeId}}",
-  "dayOfWeek": 0,
+  "dayOfWeek": 1,
   "mealType": "dinner"
 }
 
-### Generate Shopping List
+### Update Menu Item (move to different day/meal)
+@menuItemId = paste-menu-item-id-here
+PATCH {{baseUrl}}/api/menus/{{menuPlanId}}/items/{{menuItemId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "dayOfWeek": 3,
+  "mealType": "lunch"
+}
+
+### Delete Menu Item
+DELETE {{baseUrl}}/api/menus/{{menuPlanId}}/items/{{menuItemId}}
+Authorization: Bearer {{token}}
+
+### Generate Shopping List from Menu
 POST {{baseUrl}}/api/menus/{{menuPlanId}}/generate-shopping
 Authorization: Bearer {{token}}
 Content-Type: application/json

@@ -6,6 +6,7 @@
 @token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzZTNjMTRkMi1jZmE2LTQ1ZTctYmNkMy0zNDUwMjRlODBmYzciLCJlbWFpbCI6InRlc3R1c2VyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzY3NzE3MDg1LCJleHAiOjE3NzAxMzYyODV9.mrhFscpwz-2aJjrxidvwLA--jHtKi0uQ2ZLCZsb3h5U
 @householdId = 7bafd89d-34ca-45c7-bc70-a7ee5f445799
 @userId = 3e3c14d2-cfa6-45e7-bcd3-345024e80fc7
+@boardId = 06486f5f-e0c5-4354-b686-172185ee43f8
 ### ============================================
 ### Health & Info
 ### ============================================
@@ -133,15 +134,21 @@ GET {{baseUrl}}/api/boards/{{boardId}}
 Authorization: Bearer {{token}}
 
 ### Add Link to Board
-POST {{baseUrl}}/api/boards/{{boardId}}/items
+POST {{baseUrl}}/api/boards/{{boardId}}/items/link
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "type": "link",
   "url": "https://example.com/article",
   "title": "Interesting Article"
 }
+
+### Add Photo to Board (use curl - see comment below)
+# curl -X POST "https://nuestra-app-back-production.up.railway.app/api/boards/{{boardId}}/items/photo" \
+#   -H "Authorization: Bearer {{token}}" \
+#   -F "photo=@/path/to/your/image.jpg" \
+#   -F "title=My Photo" \
+#   -F "description=Photo description"
 
 ### Delete Board
 DELETE {{baseUrl}}/api/boards/{{boardId}}

@@ -19,21 +19,22 @@ const isMember = (user, householdId) => {
 
 /**
  * Generate fresh signed URLs for board items
+ * Stored values are S3 keys (e.g., "boards/householdId/file.jpg")
  */
 const refreshItemUrls = async (item) => {
   const refreshed = { ...item };
 
   if (item.url && item.type === 'photo') {
-    // Extract key from stored URL or use stored key
-    refreshed.url = await getSignedDownloadUrl(item.url.split('?')[0].split('/').slice(-2).join('/'), 7 * 24 * 60 * 60);
+    // item.url is the S3 key - pass directly to get signed URL
+    refreshed.url = await getSignedDownloadUrl(item.url, 7 * 24 * 60 * 60);
   }
 
   if (item.thumbnailUrl) {
-    refreshed.thumbnailUrl = await getSignedDownloadUrl(item.thumbnailUrl.split('?')[0].split('/').slice(-2).join('/'), 7 * 24 * 60 * 60);
+    refreshed.thumbnailUrl = await getSignedDownloadUrl(item.thumbnailUrl, 7 * 24 * 60 * 60);
   }
 
   if (item.photoBackDrawingUrl) {
-    refreshed.photoBackDrawingUrl = await getSignedDownloadUrl(item.photoBackDrawingUrl.split('?')[0].split('/').slice(-2).join('/'), 7 * 24 * 60 * 60);
+    refreshed.photoBackDrawingUrl = await getSignedDownloadUrl(item.photoBackDrawingUrl, 7 * 24 * 60 * 60);
   }
 
   return refreshed;

@@ -4,7 +4,8 @@
 
 @baseUrl = https://nuestra-app-back-production.up.railway.app
 @token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzZTNjMTRkMi1jZmE2LTQ1ZTctYmNkMy0zNDUwMjRlODBmYzciLCJlbWFpbCI6InRlc3R1c2VyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzY3NzE3MDg1LCJleHAiOjE3NzAxMzYyODV9.mrhFscpwz-2aJjrxidvwLA--jHtKi0uQ2ZLCZsb3h5U
-
+@householdId = 7bafd89d-34ca-45c7-bc70-a7ee5f445799
+@userId = 3e3c14d2-cfa6-45e7-bcd3-345024e80fc7
 ### ============================================
 ### Health & Info
 ### ============================================
@@ -86,7 +87,7 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "inviteCode": "ABC123XY"
+  "inviteCode": "YDGP8447"
 }
 
 ### Update Member Income

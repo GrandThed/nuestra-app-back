@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../lib/prisma');
 const { success, created, error, forbidden, notFound, serverError } = require('../lib/response');
 const { authenticate } = require('../middleware/auth');
+const { seedHouseholdCategories } = require('../services/householdSeeder');
 
 // All routes require authentication
 router.use(authenticate);
@@ -66,6 +67,9 @@ router.post('/', async (req, res) => {
         }
       }
     });
+
+    // Seed default categories for the new household
+    await seedHouseholdCategories(household.id);
 
     return created(res, {
       household: {

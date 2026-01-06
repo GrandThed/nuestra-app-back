@@ -91,6 +91,15 @@ Content-Type: application/json
   "inviteCode": "YDGP8447"
 }
 
+### Update Household Settings (name, hemisphere)
+PATCH {{baseUrl}}/api/households/{{householdId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "hemisphere": "south"
+}
+
 ### Update Member Income
 PATCH {{baseUrl}}/api/households/{{householdId}}/members/{{userId}}
 Authorization: Bearer {{token}}

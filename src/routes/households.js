@@ -288,6 +288,78 @@ router.post('/join', async (req, res) => {
 });
 
 /**
+ * PATCH /api/households/:id
+ * Update household settings (name, hemisphere)
+ */
+router.patch('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, hemisphere } = req.body;
+
+    // Check membership (only owners can update household settings)
+    if (!isOwner(req.user, id)) {
+      return forbidden(res, 'Only owners can update household settings');
+    }
+
+    const household = await prisma.household.findUnique({
+      where: { id }
+    });
+
+    if (!household) {
+      return notFound(res, 'Household not found');
+    }
+
+    const updateData = {};
+    if (name !== undefined) updateData.name = name.trim();
+    if (hemisphere !== undefined) {
+      const validHemispheres = ['north', 'south'];
+      if (!validHemispheres.includes(hemisphere)) {
+        return error(res, 'Invalid hemisphere. Must be "north" or "south"');
+      }
+      updateData.hemisphere = hemisphere;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return error(res, 'No valid fields to update');
+    }
+
+    const updated = await prisma.household.update({
+      where: { id },
+      data: updateData,
+      include: {
+        members: {
+          include: {
+            user: {
+              select: { id: true, name: true, email: true, avatarUrl: true }
+            }
+          }
+        }
+      }
+    });
+
+    return success(res, {
+      household: {
+        id: updated.id,
+        name: updated.name,
+        hemisphere: updated.hemisphere,
+        createdAt: updated.createdAt,
+        members: updated.members.map(m => ({
+          id: m.id,
+          userId: m.user.id,
+          name: m.user.name,
+          email: m.user.email,
+          avatarUrl: m.user.avatarUrl,
+          role: m.role,
+          income: m.income
+        }))
+      }
+    });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
  * PATCH /api/households/:id/members/:userId
  * Update member info (income)
  */

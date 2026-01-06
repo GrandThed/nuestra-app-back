@@ -8,7 +8,7 @@
 @userId = 3e3c14d2-cfa6-45e7-bcd3-345024e80fc7
 @boardId = 06486f5f-e0c5-4354-b686-172185ee43f8
 
-@menuPlanId = 1a2b3c4d-5e6f-7081-9201-112131415161
+@menuPlanId = b1fbbaac-f510-40e3-9414-963a0b6d1597
 
 @wishlistItemId = 1a2b3c4d-5e6f-7081-9201-112131415161
 
@@ -164,7 +164,7 @@ Authorization: Bearer {{token}}
 ### Recipes
 ### ============================================
 
-@recipeId = paste-recipe-id-here
+@recipeId = 8e92bb93-33a2-4d7e-adca-20624cda7b30
 
 ### List Recipes
 GET {{baseUrl}}/api/recipes?householdId={{householdId}}

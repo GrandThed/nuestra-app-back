@@ -40,16 +40,21 @@ const isOwner = (user, householdId) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, hemisphere } = req.body;
 
     if (!name || name.trim().length === 0) {
       return error(res, 'Household name is required');
     }
 
+    // Validate hemisphere if provided
+    const validHemispheres = ['north', 'south'];
+    const selectedHemisphere = hemisphere && validHemispheres.includes(hemisphere) ? hemisphere : 'north';
+
     // Create household with user as owner
     const household = await prisma.household.create({
       data: {
         name: name.trim(),
+        hemisphere: selectedHemisphere,
         members: {
           create: {
             userId: req.user.id,
@@ -75,6 +80,7 @@ router.post('/', async (req, res) => {
       household: {
         id: household.id,
         name: household.name,
+        hemisphere: household.hemisphere,
         createdAt: household.createdAt,
         members: household.members.map(m => ({
           id: m.id,
@@ -126,6 +132,7 @@ router.get('/:id', async (req, res) => {
       household: {
         id: household.id,
         name: household.name,
+        hemisphere: household.hemisphere,
         createdAt: household.createdAt,
         members: household.members.map(m => ({
           id: m.id,

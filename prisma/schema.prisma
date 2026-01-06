@@ -20,6 +20,7 @@ model User {
 
   householdMembers HouseholdMember[]
   boardItems       BoardItem[]
+  recipes          Recipe[]
   expenses         Expense[]
   expenseSplits    ExpenseSplit[]
   wishlistItems    WishlistItem[]
@@ -31,9 +32,10 @@ model User {
 }
 
 model Household {
-  id        String   @id @default(uuid())
-  name      String
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  name       String
+  hemisphere String   @default("north") // north, south - affects seasonal calculations
+  createdAt  DateTime @default(now())
 
   members            HouseholdMember[]
   invites            HouseholdInvite[]
@@ -122,22 +124,21 @@ model Recipe {
   imageUrl     String?
   servings     Int?
   sourceUrl    String?
-  season       String?  // spring, summer, fall, winter
+  createdById  String
   createdAt    DateTime @default(now())
 
-  household     Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  menuItems     MenuItem[]
-  wishlistItems WishlistItem[]
+  household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdBy      User            @relation(fields: [createdById], references: [id])
+  menuItems      MenuItem[]
+  wishlistItems  WishlistItem[]
   calendarEvents CalendarEvent[]
 }
 
 model SeasonalVegetable {
-  id         String @id @default(uuid())
-  name       String
-  season     String // spring, summer, fall, winter
-  priceLevel String // cheap, normal, expensive
-
-  @@unique([name, season])
+  id        String @id @default(uuid())
+  name      String @unique
+  startWeek Int    // 1-52, week when vegetable comes in season (Northern Hemisphere)
+  endWeek   Int    // 1-52, week when vegetable goes out of season (if endWeek < startWeek, it wraps around year)
 }
 
 // ==================== MENU PLANNER ====================

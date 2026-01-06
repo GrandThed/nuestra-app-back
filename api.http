@@ -58,13 +58,14 @@ Authorization: Bearer {{token}}
 ### Households
 ### ============================================
 
-### Create Household
+### Create Household (with hemisphere for seasonal calculations)
 POST {{baseUrl}}/api/households
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "name": "Depto"
+  "name": "Depto",
+  "hemisphere": "south"
 }
 
 ### Get Household
@@ -141,8 +142,14 @@ Authorization: Bearer {{token}}
 ### Recipes
 ### ============================================
 
+@recipeId = paste-recipe-id-here
+
 ### List Recipes
 GET {{baseUrl}}/api/recipes?householdId={{householdId}}
+Authorization: Bearer {{token}}
+
+### List Recipes with Search
+GET {{baseUrl}}/api/recipes?householdId={{householdId}}&search=pasta
 Authorization: Bearer {{token}}
 
 ### Create Recipe
@@ -156,24 +163,62 @@ Content-Type: application/json
   "ingredients": [
     { "name": "Spaghetti", "quantity": 400, "unit": "g" },
     { "name": "Pancetta", "quantity": 200, "unit": "g" },
-    { "name": "Eggs", "quantity": 4, "unit": "units" }
+    { "name": "Egg", "quantity": 4, "unit": "units" },
+    { "name": "Parmesan", "quantity": 100, "unit": "g" }
   ],
   "instructions": [
-    "Boil water and cook pasta",
+    "Boil water and cook pasta al dente",
     "Fry pancetta until crispy",
-    "Mix eggs with parmesan",
-    "Combine and serve"
+    "Mix eggs with grated parmesan",
+    "Combine hot pasta with pancetta, remove from heat",
+    "Add egg mixture and toss quickly"
   ],
   "servings": 4
 }
 
-### Get Recipe
-# @recipeId = paste-recipe-id-here
+### Create Seasonal Recipe (with seasonal vegetables)
+POST {{baseUrl}}/api/recipes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "title": "Tomato Basil Salad",
+  "ingredients": [
+    { "name": "Tomato", "quantity": 4, "unit": "units" },
+    { "name": "Basil", "quantity": 1, "unit": "bunch" },
+    { "name": "Onion", "quantity": 1, "unit": "unit" },
+    { "name": "Olive oil", "quantity": 3, "unit": "tbsp" }
+  ],
+  "instructions": [
+    "Slice tomatoes",
+    "Chop basil leaves",
+    "Slice onion thinly",
+    "Combine and drizzle with olive oil"
+  ],
+  "servings": 2
+}
+
+### Get Recipe (includes seasonality info)
 GET {{baseUrl}}/api/recipes/{{recipeId}}
 Authorization: Bearer {{token}}
 
-### Get Seasonal Vegetables
-GET {{baseUrl}}/api/recipes/seasonal-vegetables?season=summer
+### Update Recipe
+PATCH {{baseUrl}}/api/recipes/{{recipeId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Pasta Carbonara Classic",
+  "servings": 6
+}
+
+### Delete Recipe
+DELETE {{baseUrl}}/api/recipes/{{recipeId}}
+Authorization: Bearer {{token}}
+
+### Get Seasonal Vegetables (shows what's in season now)
+GET {{baseUrl}}/api/recipes/seasonal-vegetables?householdId={{householdId}}
 Authorization: Bearer {{token}}
 
 ### ============================================

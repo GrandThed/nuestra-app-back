@@ -1,9 +1,10 @@
 const multer = require('multer');
-const { MAX_FILE_SIZE, ALLOWED_IMAGE_TYPES, ALLOWED_DOCUMENT_TYPES } = require('../services/storage');
+const { ALLOWED_IMAGE_TYPES, ALLOWED_DOCUMENT_TYPES } = require('../services/storage');
 
 /**
  * Multer configuration for memory storage
  * Files are stored in memory as Buffer for direct upload to S3
+ * No file size limit - Railway/S3 handles large files
  */
 const storage = multer.memoryStorage();
 
@@ -35,10 +36,7 @@ const documentFilter = (req, file, cb) => {
  */
 const uploadImage = multer({
   storage,
-  fileFilter: imageFilter,
-  limits: {
-    fileSize: MAX_FILE_SIZE
-  }
+  fileFilter: imageFilter
 });
 
 /**
@@ -47,10 +45,7 @@ const uploadImage = multer({
  */
 const uploadDocument = multer({
   storage,
-  fileFilter: documentFilter,
-  limits: {
-    fileSize: MAX_FILE_SIZE
-  }
+  fileFilter: documentFilter
 });
 
 /**
@@ -59,10 +54,7 @@ const uploadDocument = multer({
  */
 const uploadImages = multer({
   storage,
-  fileFilter: imageFilter,
-  limits: {
-    fileSize: MAX_FILE_SIZE
-  }
+  fileFilter: imageFilter
 });
 
 /**
@@ -70,12 +62,6 @@ const uploadImages = multer({
  */
 const handleUploadError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({
-        success: false,
-        error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`
-      });
-    }
     return res.status(400).json({
       success: false,
       error: err.message

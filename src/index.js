@@ -19,9 +19,9 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// Body parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+// Body parsing - no size limit for large file uploads
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ extended: true, limit: '500mb' }));
 
 // Health check endpoint (useful for Railway)
 app.get('/health', (req, res) => {

@@ -668,7 +668,151 @@ GET {{baseUrl}}/api/expenses/summary?householdId={{householdId}}&month=1&year=20
 Authorization: Bearer {{token}}
 
 ### ============================================
-### Calendar (Phase 10 - Not yet implemented)
+### Calendar
 ### ============================================
 
-# Calendar routes are planned for Phase 10
+@eventId = paste-event-id-here
+
+### --- Events ---
+
+### List Calendar Events (3 months: Dec 2025 - Feb 2026)
+GET {{baseUrl}}/api/calendar?householdId={{householdId}}&from=2025-12-01&to=2026-02-28
+Authorization: Bearer {{token}}
+
+### List Calendar Events (current month + 1 before/after)
+GET {{baseUrl}}/api/calendar?householdId={{householdId}}&from=2025-12-01&to=2026-02-28
+Authorization: Bearer {{token}}
+
+### Get Single Event
+GET {{baseUrl}}/api/calendar/{{eventId}}
+Authorization: Bearer {{token}}
+
+### Create Simple Event
+POST {{baseUrl}}/api/calendar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "title": "Dinner with friends",
+  "startDate": "2026-01-15T19:00:00Z",
+  "endDate": "2026-01-15T22:00:00Z",
+  "allDay": false
+}
+
+### Create All-Day Event
+POST {{baseUrl}}/api/calendar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "title": "Birthday",
+  "startDate": "2026-01-20",
+  "allDay": true
+}
+
+### Create Recurring Event (weekly)
+POST {{baseUrl}}/api/calendar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "title": "Weekly Team Meeting",
+  "startDate": "2026-01-07T10:00:00Z",
+  "endDate": "2026-01-07T11:00:00Z",
+  "recurrence": "weekly",
+  "recurrenceEndDate": "2026-03-31"
+}
+
+### Create Recurring Event (monthly)
+POST {{baseUrl}}/api/calendar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "title": "Monthly Bills Due",
+  "startDate": "2026-01-01",
+  "allDay": true,
+  "recurrence": "monthly"
+}
+
+### Create Event Linked to Board (album)
+POST {{baseUrl}}/api/calendar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "title": "Trip to the beach",
+  "description": "Weekend getaway",
+  "startDate": "2026-02-14",
+  "endDate": "2026-02-16",
+  "allDay": true,
+  "linkedBoardId": "{{boardId}}"
+}
+
+### Create Event Linked to Recipe
+POST {{baseUrl}}/api/calendar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "title": "Cooking class",
+  "startDate": "2026-01-25T18:00:00Z",
+  "linkedRecipeId": "{{recipeId}}"
+}
+
+### Create Event Linked to Menu Plan
+POST {{baseUrl}}/api/calendar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "title": "Meal prep day",
+  "startDate": "2026-01-12",
+  "allDay": true,
+  "linkedMenuPlanId": "{{menuPlanId}}"
+}
+
+### Update Event
+PATCH {{baseUrl}}/api/calendar/{{eventId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Updated Event Title",
+  "description": "New description"
+}
+
+### Update Event - Change Recurrence
+PATCH {{baseUrl}}/api/calendar/{{eventId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "recurrence": "daily",
+  "recurrenceEndDate": "2026-02-28"
+}
+
+### Delete Event (all occurrences)
+DELETE {{baseUrl}}/api/calendar/{{eventId}}
+Authorization: Bearer {{token}}
+
+### Delete Future Occurrences Only
+DELETE {{baseUrl}}/api/calendar/{{eventId}}?deleteRecurring=future&occurrenceDate=2026-02-01
+Authorization: Bearer {{token}}
+
+### --- Timeline ---
+
+### Get Unified Timeline (all modules combined)
+GET {{baseUrl}}/api/calendar/timeline?householdId={{householdId}}&from=2026-01-01&to=2026-01-31
+Authorization: Bearer {{token}}
+
+### Get Timeline for 3 Months
+GET {{baseUrl}}/api/calendar/timeline?householdId={{householdId}}&from=2025-12-01&to=2026-02-28
+Authorization: Bearer {{token}}

@@ -46,7 +46,7 @@ app.use('/api/recipes', require('./routes/recipes'));
 app.use('/api/menus', require('./routes/menus'));
 app.use('/api/wishlists', require('./routes/wishlists'));
 app.use('/api/expenses', require('./routes/expenses'));
-// app.use('/api/calendar', require('./routes/calendar'));
+app.use('/api/calendar', require('./routes/calendar'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {

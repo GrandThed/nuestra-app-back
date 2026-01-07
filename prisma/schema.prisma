@@ -149,8 +149,9 @@ model MenuPlan {
   name        String?  // Optional name like "Week of Jan 6" or "Holiday meals"
   createdAt   DateTime @default(now())
 
-  household Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  items     MenuItem[]
+  household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  items          MenuItem[]
+  calendarEvents CalendarEvent[]
 }
 
 model MenuItem {
@@ -263,11 +264,13 @@ model CalendarEvent {
   recurrenceEndDate DateTime?
   linkedBoardId    String?
   linkedRecipeId   String?
+  linkedMenuPlanId String?
   createdById      String
   createdAt        DateTime  @default(now())
 
-  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  linkedBoard  Board?    @relation(fields: [linkedBoardId], references: [id])
-  linkedRecipe Recipe?   @relation(fields: [linkedRecipeId], references: [id])
-  createdBy    User      @relation(fields: [createdById], references: [id])
+  household      Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  linkedBoard    Board?    @relation(fields: [linkedBoardId], references: [id])
+  linkedRecipe   Recipe?   @relation(fields: [linkedRecipeId], references: [id])
+  linkedMenuPlan MenuPlan? @relation(fields: [linkedMenuPlanId], references: [id])
+  createdBy      User      @relation(fields: [createdById], references: [id])
 }

@@ -528,6 +528,11 @@ Content-Type: application/json
 ### Expenses
 ### ============================================
 
+@expenseCategoryId = paste-expense-category-id-here
+@expenseId = paste-expense-id-here
+
+### --- Categories ---
+
 ### List Expense Categories
 GET {{baseUrl}}/api/expenses/categories?householdId={{householdId}}
 Authorization: Bearer {{token}}
@@ -543,11 +548,39 @@ Content-Type: application/json
   "icon": "🛒"
 }
 
-### List Expenses
-GET {{baseUrl}}/api/expenses?householdId={{householdId}}&month=2024-01
+### Update Expense Category
+PATCH {{baseUrl}}/api/expenses/categories/{{expenseCategoryId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Supermarket",
+  "icon": "🛒"
+}
+
+### Delete Expense Category
+DELETE {{baseUrl}}/api/expenses/categories/{{expenseCategoryId}}
 Authorization: Bearer {{token}}
 
-### Create Expense
+### --- Expenses ---
+
+### List Expenses (all)
+GET {{baseUrl}}/api/expenses?householdId={{householdId}}
+Authorization: Bearer {{token}}
+
+### List Expenses (by month)
+GET {{baseUrl}}/api/expenses?householdId={{householdId}}&month=1&year=2026
+Authorization: Bearer {{token}}
+
+### List Expenses (unsettled only)
+GET {{baseUrl}}/api/expenses?householdId={{householdId}}&settled=false
+Authorization: Bearer {{token}}
+
+### List Expenses (by category)
+GET {{baseUrl}}/api/expenses?householdId={{householdId}}&categoryId={{expenseCategoryId}}
+Authorization: Bearer {{token}}
+
+### Create Expense (splits calculated automatically!)
 POST {{baseUrl}}/api/expenses
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -557,72 +590,85 @@ Content-Type: application/json
   "description": "Weekly groceries",
   "amount": 15000.00,
   "currency": "ARS",
-  "date": "2024-01-15",
-  "paidById": "{{userId}}"
+  "date": "2026-01-07",
+  "categoryId": "{{expenseCategoryId}}"
 }
 
-### Get Expense Summary
-GET {{baseUrl}}/api/expenses/summary?householdId={{householdId}}&month=2024-01
+### Get Expense by ID
+GET {{baseUrl}}/api/expenses/{{expenseId}}
 Authorization: Bearer {{token}}
 
-### ============================================
-### Wishlist
-### ============================================
+### Update Expense
+PATCH {{baseUrl}}/api/expenses/{{expenseId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
 
-### List Wishlist Categories
-GET {{baseUrl}}/api/wishlist/categories?householdId={{householdId}}
+{
+  "description": "Monthly groceries",
+  "amount": 20000.00
+}
+
+### Delete Expense
+DELETE {{baseUrl}}/api/expenses/{{expenseId}}
 Authorization: Bearer {{token}}
 
-### List Wishlist Items
-GET {{baseUrl}}/api/wishlist?householdId={{householdId}}
-Authorization: Bearer {{token}}
+### --- Settlements ---
 
-### Create Wishlist Item
-POST {{baseUrl}}/api/wishlist
+### Settle Single Expense (all splits)
+PATCH {{baseUrl}}/api/expenses/{{expenseId}}/settle
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "settled": true
+}
+
+### Settle Single User's Split
+PATCH {{baseUrl}}/api/expenses/{{expenseId}}/settle
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "settled": true
+}
+
+### Unsettle an Expense
+PATCH {{baseUrl}}/api/expenses/{{expenseId}}/settle
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "settled": false
+}
+
+### Settle All Expenses in Period (mid-month settlement!)
+POST {{baseUrl}}/api/expenses/settle-period
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
   "householdId": "{{householdId}}",
-  "categoryId": "{{categoryId}}",
-  "ownerType": "shared",
-  "name": "Milk",
-  "quantity": 2,
-  "unit": "liters"
+  "fromDate": "2026-01-01",
+  "toDate": "2026-01-15"
 }
 
-### Toggle Checked
-# @wishlistItemId = paste-item-id-here
-PATCH {{baseUrl}}/api/wishlist/{{wishlistItemId}}/check
+### --- Summary ---
+
+### Get Expense Summary (current month)
+GET {{baseUrl}}/api/expenses/summary?householdId={{householdId}}&month=1&year=2026
 Authorization: Bearer {{token}}
-Content-Type: application/json
 
-{
-  "checked": true
-}
+### Get Expense Summary (whole year)
+GET {{baseUrl}}/api/expenses/summary?householdId={{householdId}}&year=2026
+Authorization: Bearer {{token}}
+
+### Get Expense Summary (unsettled only)
+GET {{baseUrl}}/api/expenses/summary?householdId={{householdId}}&month=1&year=2026&settledOnly=false
+Authorization: Bearer {{token}}
 
 ### ============================================
-### Calendar
+### Calendar (Phase 10 - Not yet implemented)
 ### ============================================
 
-### List Calendar Events
-GET {{baseUrl}}/api/calendar?householdId={{householdId}}&from=2024-01-01&to=2024-01-31
-Authorization: Bearer {{token}}
-
-### Create Calendar Event
-POST {{baseUrl}}/api/calendar
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{
-  "householdId": "{{householdId}}",
-  "title": "Dinner with friends",
-  "startDate": "2024-01-20T19:00:00Z",
-  "endDate": "2024-01-20T22:00:00Z",
-  "allDay": false,
-  "recurrence": "none"
-}
-
-### Get Unified Timeline
-GET {{baseUrl}}/api/calendar/timeline?householdId={{householdId}}&from=2024-01-01&to=2024-01-31
-Authorization: Bearer {{token}}
+# Calendar routes are planned for Phase 10

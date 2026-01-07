@@ -15,122 +15,10 @@ const isMember = (user, householdId) => {
 };
 
 /**
- * Get start of week (Monday) for a given date
- */
-const getWeekStart = (date) => {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-
-/**
  * GET /api/menus
  * List menu plans for a household
  */
 router.get('/', async (req, res) => {
-  try {
-    const { householdId, from, to } = req.query;
-
-    if (!householdId) {
-      return error(res, 'householdId is required');
-    }
-
-    if (!isMember(req.user, householdId)) {
-      return forbidden(res, 'You are not a member of this household');
-    }
-
-    const where = { householdId };
-
-    // Optional date range filter
-    if (from || to) {
-      where.weekStartDate = {};
-      if (from) where.weekStartDate.gte = new Date(from);
-      if (to) where.weekStartDate.lte = new Date(to);
-    }
-
-    const menuPlans = await prisma.menuPlan.findMany({
-      where,
-      include: {
-        _count: {
-          select: { items: true }
-        }
-      },
-      orderBy: { weekStartDate: 'desc' }
-    });
-
-    return success(res, {
-      menuPlans: menuPlans.map(plan => ({
-        id: plan.id,
-        weekStartDate: plan.weekStartDate,
-        itemCount: plan._count.items,
-        createdAt: plan.createdAt
-      }))
-    });
-  } catch (err) {
-    return serverError(res, err);
-  }
-});
-
-/**
- * POST /api/menus
- * Create a new menu plan for a week
- */
-router.post('/', async (req, res) => {
-  try {
-    const { householdId, weekStartDate } = req.body;
-
-    if (!householdId || !weekStartDate) {
-      return error(res, 'householdId and weekStartDate are required');
-    }
-
-    if (!isMember(req.user, householdId)) {
-      return forbidden(res, 'You are not a member of this household');
-    }
-
-    // Normalize to Monday of the week
-    const normalizedWeekStart = getWeekStart(weekStartDate);
-
-    // Check if plan already exists for this week
-    const existing = await prisma.menuPlan.findFirst({
-      where: {
-        householdId,
-        weekStartDate: normalizedWeekStart
-      }
-    });
-
-    if (existing) {
-      return error(res, 'A menu plan already exists for this week');
-    }
-
-    const menuPlan = await prisma.menuPlan.create({
-      data: {
-        householdId,
-        weekStartDate: normalizedWeekStart
-      }
-    });
-
-    return created(res, {
-      menuPlan: {
-        id: menuPlan.id,
-        weekStartDate: menuPlan.weekStartDate,
-        items: [],
-        createdAt: menuPlan.createdAt
-      }
-    });
-  } catch (err) {
-    return serverError(res, err);
-  }
-});
-
-/**
- * GET /api/menus/current
- * Get or create the current week's menu plan
- * NOTE: This route MUST be defined before /:id routes
- */
-router.get('/current', async (req, res) => {
   try {
     const { householdId } = req.query;
 
@@ -142,69 +30,140 @@ router.get('/current', async (req, res) => {
       return forbidden(res, 'You are not a member of this household');
     }
 
-    const currentWeekStart = getWeekStart(new Date());
-
-    let menuPlan = await prisma.menuPlan.findFirst({
-      where: {
-        householdId,
-        weekStartDate: currentWeekStart
-      },
+    const menuPlans = await prisma.menuPlan.findMany({
+      where: { householdId },
       include: {
         items: {
-          include: {
-            recipe: {
-              select: {
-                id: true,
-                title: true,
-                imageUrl: true,
-                servings: true,
-                ingredients: true
-              }
-            }
-          },
-          orderBy: [{ dayOfWeek: 'asc' }, { mealType: 'asc' }]
+          select: { date: true },
+          orderBy: { date: 'asc' }
+        },
+        _count: {
+          select: { items: true }
         }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return success(res, {
+      menuPlans: menuPlans.map(plan => {
+        const dates = plan.items.map(i => i.date);
+        return {
+          id: plan.id,
+          name: plan.name,
+          itemCount: plan._count.items,
+          dateRange: dates.length > 0 ? {
+            from: dates[0],
+            to: dates[dates.length - 1]
+          } : null,
+          createdAt: plan.createdAt
+        };
+      })
+    });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/menus
+ * Create a new menu plan
+ */
+router.post('/', async (req, res) => {
+  try {
+    const { householdId, name } = req.body;
+
+    if (!householdId) {
+      return error(res, 'householdId is required');
+    }
+
+    if (!isMember(req.user, householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const menuPlan = await prisma.menuPlan.create({
+      data: {
+        householdId,
+        name: name || null
       }
     });
 
-    // Create if doesn't exist
-    if (!menuPlan) {
-      menuPlan = await prisma.menuPlan.create({
-        data: {
-          householdId,
-          weekStartDate: currentWeekStart
-        },
-        include: {
-          items: {
-            include: {
-              recipe: {
-                select: {
-                  id: true,
-                  title: true,
-                  imageUrl: true,
-                  servings: true,
-                  ingredients: true
-                }
-              }
-            }
-          }
-        }
-      });
-    }
-
-    return success(res, {
+    return created(res, {
       menuPlan: {
         id: menuPlan.id,
-        weekStartDate: menuPlan.weekStartDate,
-        items: menuPlan.items.map(item => ({
-          id: item.id,
-          dayOfWeek: item.dayOfWeek,
-          mealType: item.mealType,
-          recipe: item.recipe,
-          createdAt: item.createdAt
-        })),
+        name: menuPlan.name,
+        items: [],
         createdAt: menuPlan.createdAt
       }
+    });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * GET /api/menus/upcoming
+ * Get all menu items for a date range (default: next 7 days)
+ * NOTE: This route MUST be defined before /:id routes
+ */
+router.get('/upcoming', async (req, res) => {
+  try {
+    const { householdId, from, to } = req.query;
+
+    if (!householdId) {
+      return error(res, 'householdId is required');
+    }
+
+    if (!isMember(req.user, householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    // Default: today to 7 days from now
+    const fromDate = from ? new Date(from) : new Date();
+    fromDate.setHours(0, 0, 0, 0);
+
+    const toDate = to ? new Date(to) : new Date(fromDate);
+    if (!to) {
+      toDate.setDate(toDate.getDate() + 7);
+    }
+    toDate.setHours(23, 59, 59, 999);
+
+    const menuItems = await prisma.menuItem.findMany({
+      where: {
+        menuPlan: { householdId },
+        date: {
+          gte: fromDate,
+          lte: toDate
+        }
+      },
+      include: {
+        recipe: {
+          select: {
+            id: true,
+            title: true,
+            imageUrl: true,
+            servings: true,
+            ingredients: true
+          }
+        },
+        menuPlan: {
+          select: { id: true, name: true }
+        }
+      },
+      orderBy: [{ date: 'asc' }, { mealType: 'asc' }]
+    });
+
+    return success(res, {
+      from: fromDate,
+      to: toDate,
+      items: menuItems.map(item => ({
+        id: item.id,
+        date: item.date,
+        mealType: item.mealType,
+        substitutions: item.substitutions,
+        recipe: item.recipe,
+        menuPlan: item.menuPlan,
+        createdAt: item.createdAt
+      }))
     });
   } catch (err) {
     return serverError(res, err);
@@ -234,7 +193,7 @@ router.get('/:id', async (req, res) => {
               }
             }
           },
-          orderBy: [{ dayOfWeek: 'asc' }, { mealType: 'asc' }]
+          orderBy: [{ date: 'asc' }, { mealType: 'asc' }]
         }
       }
     });
@@ -250,11 +209,12 @@ router.get('/:id', async (req, res) => {
     return success(res, {
       menuPlan: {
         id: menuPlan.id,
-        weekStartDate: menuPlan.weekStartDate,
+        name: menuPlan.name,
         items: menuPlan.items.map(item => ({
           id: item.id,
-          dayOfWeek: item.dayOfWeek,
+          date: item.date,
           mealType: item.mealType,
+          substitutions: item.substitutions,
           recipe: item.recipe,
           createdAt: item.createdAt
         })),
@@ -303,14 +263,10 @@ router.delete('/:id', async (req, res) => {
 router.post('/:id/items', async (req, res) => {
   try {
     const { id } = req.params;
-    const { recipeId, dayOfWeek, mealType } = req.body;
+    const { recipeId, date, mealType } = req.body;
 
-    if (!recipeId || dayOfWeek === undefined || !mealType) {
-      return error(res, 'recipeId, dayOfWeek, and mealType are required');
-    }
-
-    if (dayOfWeek < 0 || dayOfWeek > 6) {
-      return error(res, 'dayOfWeek must be between 0 (Sunday) and 6 (Saturday)');
+    if (!recipeId || !date || !mealType) {
+      return error(res, 'recipeId, date, and mealType are required');
     }
 
     const validMealTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -343,12 +299,16 @@ router.post('/:id/items', async (req, res) => {
       return forbidden(res, 'Recipe does not belong to this household');
     }
 
+    // Get substitutions from request body (optional)
+    const { substitutions } = req.body;
+
     const menuItem = await prisma.menuItem.create({
       data: {
         menuPlanId: id,
         recipeId,
-        dayOfWeek,
-        mealType
+        date: new Date(date),
+        mealType,
+        substitutions: substitutions || null
       },
       include: {
         recipe: {
@@ -356,7 +316,8 @@ router.post('/:id/items', async (req, res) => {
             id: true,
             title: true,
             imageUrl: true,
-            servings: true
+            servings: true,
+            ingredients: true
           }
         }
       }
@@ -365,8 +326,9 @@ router.post('/:id/items', async (req, res) => {
     return created(res, {
       item: {
         id: menuItem.id,
-        dayOfWeek: menuItem.dayOfWeek,
+        date: menuItem.date,
         mealType: menuItem.mealType,
+        substitutions: menuItem.substitutions,
         recipe: menuItem.recipe,
         createdAt: menuItem.createdAt
       }
@@ -378,12 +340,12 @@ router.post('/:id/items', async (req, res) => {
 
 /**
  * PATCH /api/menus/:id/items/:itemId
- * Update a menu item (move to different day/meal)
+ * Update a menu item (move to different date/meal)
  */
 router.patch('/:id/items/:itemId', async (req, res) => {
   try {
     const { id, itemId } = req.params;
-    const { dayOfWeek, mealType, recipeId } = req.body;
+    const { date, mealType, recipeId, substitutions } = req.body;
 
     const menuPlan = await prisma.menuPlan.findUnique({
       where: { id }
@@ -407,11 +369,8 @@ router.patch('/:id/items/:itemId', async (req, res) => {
 
     const updateData = {};
 
-    if (dayOfWeek !== undefined) {
-      if (dayOfWeek < 0 || dayOfWeek > 6) {
-        return error(res, 'dayOfWeek must be between 0 (Sunday) and 6 (Saturday)');
-      }
-      updateData.dayOfWeek = dayOfWeek;
+    if (date !== undefined) {
+      updateData.date = new Date(date);
     }
 
     if (mealType !== undefined) {
@@ -438,6 +397,11 @@ router.patch('/:id/items/:itemId', async (req, res) => {
       updateData.recipeId = recipeId;
     }
 
+    // Handle substitutions update (can set to null to clear)
+    if (substitutions !== undefined) {
+      updateData.substitutions = substitutions;
+    }
+
     const updated = await prisma.menuItem.update({
       where: { id: itemId },
       data: updateData,
@@ -447,7 +411,8 @@ router.patch('/:id/items/:itemId', async (req, res) => {
             id: true,
             title: true,
             imageUrl: true,
-            servings: true
+            servings: true,
+            ingredients: true
           }
         }
       }
@@ -456,8 +421,9 @@ router.patch('/:id/items/:itemId', async (req, res) => {
     return success(res, {
       item: {
         id: updated.id,
-        dayOfWeek: updated.dayOfWeek,
+        date: updated.date,
         mealType: updated.mealType,
+        substitutions: updated.substitutions,
         recipe: updated.recipe,
         createdAt: updated.createdAt
       }
@@ -507,8 +473,8 @@ router.delete('/:id/items/:itemId', async (req, res) => {
 
 /**
  * POST /api/menus/:id/generate-shopping
- * Generate shopping list from menu plan ingredients
- * Aggregates ingredients from all recipes in the plan
+ * Generate shopping list from menu plan and create wishlist items
+ * Creates a "Supermarket" category with the menu name and adds all ingredients
  */
 router.post('/:id/generate-shopping', async (req, res) => {
   try {
@@ -528,7 +494,8 @@ router.post('/:id/generate-shopping', async (req, res) => {
                 ingredients: true
               }
             }
-          }
+          },
+          orderBy: { date: 'asc' }
         }
       }
     });
@@ -541,25 +508,38 @@ router.post('/:id/generate-shopping', async (req, res) => {
       return forbidden(res, 'You are not a member of this household');
     }
 
-    // Aggregate ingredients from all recipes
+    // Aggregate ingredients from all recipes (with substitutions applied)
     const ingredientMap = new Map();
 
     for (const item of menuPlan.items) {
       const recipe = item.recipe;
       if (!recipe || !Array.isArray(recipe.ingredients)) continue;
 
+      const subs = item.substitutions || {};
+
       for (const ing of recipe.ingredients) {
-        const key = `${ing.name?.toLowerCase()}-${ing.unit?.toLowerCase() || ''}`;
+        // Check if this ingredient has been substituted
+        let finalIng = ing;
+        if (subs[ing.name]) {
+          // Use the substituted ingredient
+          finalIng = {
+            name: subs[ing.name].name || subs[ing.name],
+            quantity: subs[ing.name].quantity ?? ing.quantity,
+            unit: subs[ing.name].unit ?? ing.unit
+          };
+        }
+
+        const key = `${finalIng.name?.toLowerCase()}-${finalIng.unit?.toLowerCase() || ''}`;
 
         if (ingredientMap.has(key)) {
           const existing = ingredientMap.get(key);
-          existing.quantity += (ing.quantity || 0) * servingsMultiplier;
+          existing.quantity += (finalIng.quantity || 0) * servingsMultiplier;
           existing.recipes.push(recipe.title);
         } else {
           ingredientMap.set(key, {
-            name: ing.name,
-            quantity: (ing.quantity || 0) * servingsMultiplier,
-            unit: ing.unit || '',
+            name: finalIng.name,
+            quantity: (finalIng.quantity || 0) * servingsMultiplier,
+            unit: finalIng.unit || '',
             recipes: [recipe.title]
           });
         }
@@ -570,10 +550,62 @@ router.post('/:id/generate-shopping', async (req, res) => {
       a.name.localeCompare(b.name)
     );
 
-    return success(res, {
+    // Get date range from items
+    const dates = menuPlan.items.map(i => i.date).sort((a, b) => a - b);
+
+    // Create or get "Supermarket" category
+    const categoryName = menuPlan.name
+      ? `Supermarket - ${menuPlan.name}`
+      : 'Supermarket';
+
+    let category = await prisma.wishlistCategory.findUnique({
+      where: {
+        householdId_name: {
+          householdId: menuPlan.householdId,
+          name: categoryName
+        }
+      }
+    });
+
+    if (!category) {
+      category = await prisma.wishlistCategory.create({
+        data: {
+          householdId: menuPlan.householdId,
+          name: categoryName,
+          type: 'system',
+          sortOrder: -1 // System categories sort first
+        }
+      });
+    }
+
+    // Create wishlist items for each ingredient
+    if (shoppingList.length > 0) {
+      await prisma.wishlistItem.createMany({
+        data: shoppingList.map(item => ({
+          householdId: menuPlan.householdId,
+          categoryId: category.id,
+          name: item.name,
+          quantity: item.quantity || null,
+          unit: item.unit || null,
+          ownerType: 'shared',
+          checked: false
+        }))
+      });
+    }
+
+    return created(res, {
       menuPlanId: menuPlan.id,
-      weekStartDate: menuPlan.weekStartDate,
+      menuName: menuPlan.name,
+      dateRange: dates.length > 0 ? {
+        from: dates[0],
+        to: dates[dates.length - 1]
+      } : null,
       servingsMultiplier,
+      wishlistCategory: {
+        id: category.id,
+        name: category.name
+      },
+      itemsCreated: shoppingList.length,
       shoppingList
     });
   } catch (err) {

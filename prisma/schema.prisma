@@ -144,22 +144,23 @@ model SeasonalVegetable {
 // ==================== MENU PLANNER ====================
 
 model MenuPlan {
-  id            String   @id @default(uuid())
-  householdId   String
-  weekStartDate DateTime
-  createdAt     DateTime @default(now())
+  id          String   @id @default(uuid())
+  householdId String
+  name        String?  // Optional name like "Week of Jan 6" or "Holiday meals"
+  createdAt   DateTime @default(now())
 
   household Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
   items     MenuItem[]
 }
 
 model MenuItem {
-  id         String   @id @default(uuid())
-  menuPlanId String
-  recipeId   String
-  dayOfWeek  Int      // 0-6 (Sunday-Saturday)
-  mealType   String   // breakfast, lunch, dinner, snack
-  createdAt  DateTime @default(now())
+  id            String   @id @default(uuid())
+  menuPlanId    String
+  recipeId      String
+  date          DateTime // Actual date for the meal
+  mealType      String   // breakfast, lunch, dinner, snack
+  substitutions Json?    // { "Chicken": { name: "Beef", quantity: 1, unit: "kg" }, ... }
+  createdAt     DateTime @default(now())
 
   menuPlan MenuPlan @relation(fields: [menuPlanId], references: [id], onDelete: Cascade)
   recipe   Recipe   @relation(fields: [recipeId], references: [id])

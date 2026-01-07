@@ -198,6 +198,47 @@ Content-Type: application/json
   "servings": 4
 }
 
+### Create Recipe WITH ALTERNATIVES (can swap ingredients when adding to menu)
+POST {{baseUrl}}/api/recipes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "title": "Roasted Chicken",
+  "ingredients": [
+    {
+      "name": "Chicken",
+      "quantity": 1.5,
+      "unit": "kg",
+      "alternatives": [
+        { "name": "Beef roast", "quantity": 1.5, "unit": "kg" },
+        { "name": "Pork loin", "quantity": 1.5, "unit": "kg" }
+      ]
+    },
+    {
+      "name": "Potato",
+      "quantity": 6,
+      "unit": "units",
+      "alternatives": [
+        { "name": "Sweet potato", "quantity": 4, "unit": "units" },
+        { "name": "Butternut squash", "quantity": 1, "unit": "unit" }
+      ]
+    },
+    { "name": "Rosemary", "quantity": 2, "unit": "sprigs" },
+    { "name": "Garlic", "quantity": 4, "unit": "cloves" },
+    { "name": "Olive oil", "quantity": 3, "unit": "tbsp" }
+  ],
+  "instructions": [
+    "Preheat oven to 200°C",
+    "Season chicken with salt, pepper, and rosemary",
+    "Cut potatoes and toss with olive oil and garlic",
+    "Roast chicken for 1 hour, add potatoes halfway through",
+    "Rest for 10 minutes before serving"
+  ],
+  "servings": 4
+}
+
 ### Create Seasonal Recipe (with seasonal vegetables)
 POST {{baseUrl}}/api/recipes
 Authorization: Bearer {{token}}
@@ -244,25 +285,29 @@ GET {{baseUrl}}/api/recipes/seasonal-vegetables?householdId={{householdId}}
 Authorization: Bearer {{token}}
 
 ### ============================================
-### Menu Planner
+### Menu Planner (Flexible Date-Based)
 ### ============================================
 
 ### List Menu Plans
 GET {{baseUrl}}/api/menus?householdId={{householdId}}
 Authorization: Bearer {{token}}
 
-### Get Current Week's Menu (auto-creates if doesn't exist)
-GET {{baseUrl}}/api/menus/current?householdId={{householdId}}
+### Get Upcoming Menu Items (default: next 7 days)
+GET {{baseUrl}}/api/menus/upcoming?householdId={{householdId}}
 Authorization: Bearer {{token}}
 
-### Create Menu Plan (for specific week)
+### Get Upcoming Menu Items (custom date range)
+GET {{baseUrl}}/api/menus/upcoming?householdId={{householdId}}&from=2026-01-06&to=2026-01-20
+Authorization: Bearer {{token}}
+
+### Create Menu Plan
 POST {{baseUrl}}/api/menus
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
   "householdId": "{{householdId}}",
-  "weekStartDate": "2026-01-13"
+  "name": "Week of Jan 6"
 }
 
 ### Get Menu Plan by ID
@@ -273,39 +318,202 @@ Authorization: Bearer {{token}}
 DELETE {{baseUrl}}/api/menus/{{menuPlanId}}
 Authorization: Bearer {{token}}
 
-### Add Menu Item (recipe to day/meal)
+### Add Menu Item (recipe to specific date/meal)
 POST {{baseUrl}}/api/menus/{{menuPlanId}}/items
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
   "recipeId": "{{recipeId}}",
-  "dayOfWeek": 1,
+  "date": "2026-01-06",
   "mealType": "dinner"
 }
 
-### Update Menu Item (move to different day/meal)
+### Add Menu Item WITH SUBSTITUTION (swap an ingredient)
+### Example: Recipe has "Chicken" but we want "Beef" instead
+POST {{baseUrl}}/api/menus/{{menuPlanId}}/items
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "recipeId": "{{recipeId}}",
+  "date": "2026-01-07",
+  "mealType": "lunch",
+  "substitutions": {
+    "Chicken": { "name": "Beef", "quantity": 1, "unit": "kg" },
+    "Tomato": { "name": "Bell Pepper", "quantity": 2, "unit": "units" }
+  }
+}
+
+### Update Menu Item (move to different date/meal)
 @menuItemId = paste-menu-item-id-here
 PATCH {{baseUrl}}/api/menus/{{menuPlanId}}/items/{{menuItemId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "dayOfWeek": 3,
+  "date": "2026-01-08",
   "mealType": "lunch"
+}
+
+### Update Menu Item with substitution changes
+PATCH {{baseUrl}}/api/menus/{{menuPlanId}}/items/{{menuItemId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "substitutions": {
+    "Spaghetti": { "name": "Penne", "quantity": 400, "unit": "g" }
+  }
+}
+
+### Clear substitutions from menu item (use original recipe)
+PATCH {{baseUrl}}/api/menus/{{menuPlanId}}/items/{{menuItemId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "substitutions": null
 }
 
 ### Delete Menu Item
 DELETE {{baseUrl}}/api/menus/{{menuPlanId}}/items/{{menuItemId}}
 Authorization: Bearer {{token}}
 
-### Generate Shopping List from Menu
+### Generate Shopping List from Menu (creates wishlist items!)
 POST {{baseUrl}}/api/menus/{{menuPlanId}}/generate-shopping
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
   "servingsMultiplier": 1.0
+}
+
+### ============================================
+### Wishlists
+### ============================================
+
+@wishlistCategoryId = paste-category-id-here
+@wishlistItemId = paste-item-id-here
+
+### --- Categories ---
+
+### List Wishlist Categories
+GET {{baseUrl}}/api/wishlists/categories?householdId={{householdId}}
+Authorization: Bearer {{token}}
+
+### Create Wishlist Category
+POST {{baseUrl}}/api/wishlists/categories
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "name": "Gift Ideas",
+  "sortOrder": 10
+}
+
+### Update Wishlist Category
+PATCH {{baseUrl}}/api/wishlists/categories/{{wishlistCategoryId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Birthday Gifts",
+  "sortOrder": 5
+}
+
+### Delete Wishlist Category
+DELETE {{baseUrl}}/api/wishlists/categories/{{wishlistCategoryId}}
+Authorization: Bearer {{token}}
+
+### --- Items ---
+
+### List Wishlist Items (all)
+GET {{baseUrl}}/api/wishlists?householdId={{householdId}}
+Authorization: Bearer {{token}}
+
+### List Wishlist Items (by category)
+GET {{baseUrl}}/api/wishlists?householdId={{householdId}}&categoryId={{wishlistCategoryId}}
+Authorization: Bearer {{token}}
+
+### List Wishlist Items (unchecked only)
+GET {{baseUrl}}/api/wishlists?householdId={{householdId}}&checked=false
+Authorization: Bearer {{token}}
+
+### Create Wishlist Item (shared)
+POST {{baseUrl}}/api/wishlists
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "categoryId": "{{wishlistCategoryId}}",
+  "name": "Olive Oil",
+  "quantity": 1,
+  "unit": "bottle",
+  "ownerType": "shared"
+}
+
+### Create Wishlist Item (personal - visible to household for gift ideas)
+POST {{baseUrl}}/api/wishlists
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "categoryId": "{{wishlistCategoryId}}",
+  "name": "New Headphones",
+  "url": "https://example.com/headphones",
+  "price": 150.00,
+  "preferenceEmoji": "🎧",
+  "ownerType": "personal"
+}
+
+### Toggle Item Checked
+PATCH {{baseUrl}}/api/wishlists/{{wishlistItemId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "checked": true
+}
+
+### Update Wishlist Item
+PATCH {{baseUrl}}/api/wishlists/{{wishlistItemId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Extra Virgin Olive Oil",
+  "quantity": 2
+}
+
+### Delete Wishlist Item
+DELETE {{baseUrl}}/api/wishlists/{{wishlistItemId}}
+Authorization: Bearer {{token}}
+
+### Clear All Checked Items (household-wide)
+DELETE {{baseUrl}}/api/wishlists/clear-checked?householdId={{householdId}}
+Authorization: Bearer {{token}}
+
+### Clear Checked Items (specific category)
+DELETE {{baseUrl}}/api/wishlists/clear-checked?householdId={{householdId}}&categoryId={{wishlistCategoryId}}
+Authorization: Bearer {{token}}
+
+### Bulk Create Items (for programmatic use)
+POST {{baseUrl}}/api/wishlists/bulk
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "householdId": "{{householdId}}",
+  "categoryId": "{{wishlistCategoryId}}",
+  "items": [
+    { "name": "Milk", "quantity": 2, "unit": "liters" },
+    { "name": "Bread", "quantity": 1, "unit": "loaf" },
+    { "name": "Eggs", "quantity": 12, "unit": "units" }
+  ]
 }
 
 ### ============================================

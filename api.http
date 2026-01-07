@@ -3,9 +3,9 @@
 ### Click "Send Request" above each request to execute
 
 @baseUrl = https://nuestra-app-back-production.up.railway.app
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzZTNjMTRkMi1jZmE2LTQ1ZTctYmNkMy0zNDUwMjRlODBmYzciLCJlbWFpbCI6InRlc3R1c2VyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzY3NzE3MDg1LCJleHAiOjE3NzAxMzYyODV9.mrhFscpwz-2aJjrxidvwLA--jHtKi0uQ2ZLCZsb3h5U
-@householdId = 7bafd89d-34ca-45c7-bc70-a7ee5f445799
-@userId = 3e3c14d2-cfa6-45e7-bcd3-345024e80fc7
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIwYjM1ODA1MC1mNWQ2LTRmOTEtYTk5YS1kN2FiOTBjMzkyY2UiLCJlbWFpbCI6InRlc3R1c2VyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzY3NzYyMDE0LCJleHAiOjE3NzAxODEyMTR9.0Bscnc85-pRbbnXOaiDNs1amRhBTFiZy_h2VBtvxnzE
+@householdId = 6575741a-199c-47b5-b770-0db516bfdc30
+@userId = 0b358050-f5d6-4f91-a99a-d7ab90c392ce
 @boardId = 06486f5f-e0c5-4354-b686-172185ee43f8
 
 @menuPlanId = b1fbbaac-f510-40e3-9414-963a0b6d1597
@@ -439,6 +439,14 @@ Authorization: Bearer {{token}}
 
 ### List Wishlist Items (unchecked only)
 GET {{baseUrl}}/api/wishlists?householdId={{householdId}}&checked=false
+Authorization: Bearer {{token}}
+
+### List Wishlist Items (personal only)
+GET {{baseUrl}}/api/wishlists?householdId={{householdId}}&ownerType=personal
+Authorization: Bearer {{token}}
+
+### List Wishlist Items (shared only)
+GET {{baseUrl}}/api/wishlists?householdId={{householdId}}&ownerType=shared
 Authorization: Bearer {{token}}
 
 ### Create Wishlist Item (shared)

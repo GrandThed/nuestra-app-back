@@ -175,7 +175,7 @@ router.delete('/categories/:id', async (req, res) => {
  */
 router.get('/', async (req, res) => {
   try {
-    const { householdId, categoryId, checked } = req.query;
+    const { householdId, categoryId, checked, ownerType } = req.query;
 
     if (!householdId) {
       return error(res, 'householdId is required');
@@ -187,6 +187,7 @@ router.get('/', async (req, res) => {
 
     const where = { householdId };
     if (categoryId) where.categoryId = categoryId;
+    if (ownerType) where.ownerType = ownerType;
     if (checked !== undefined) where.checked = checked === 'true';
 
     const items = await prisma.wishlistItem.findMany({

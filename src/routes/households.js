@@ -192,8 +192,10 @@ router.post('/:id/invite', async (req, res) => {
 
     return created(res, {
       invite: {
+        id: invite.id,
         code: invite.code,
-        expiresAt: invite.expiresAt
+        expiresAt: invite.expiresAt,
+        createdAt: invite.createdAt
       }
     });
   } catch (err) {
@@ -272,13 +274,16 @@ router.post('/join', async (req, res) => {
       household: {
         id: household.id,
         name: household.name,
+        hemisphere: household.hemisphere,
+        createdAt: household.createdAt,
         members: household.members.map(m => ({
           id: m.id,
           userId: m.user.id,
           name: m.user.name,
           email: m.user.email,
           avatarUrl: m.user.avatarUrl,
-          role: m.role
+          role: m.role,
+          income: m.income
         }))
       }
     });

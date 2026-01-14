@@ -4,7 +4,7 @@ const prisma = require('../lib/prisma');
 const { success, created, error, forbidden, notFound, serverError, noContent } = require('../lib/response');
 const { authenticate } = require('../middleware/auth');
 const { uploadImage, handleUploadError } = require('../middleware/upload');
-const { uploadFile, deleteFile, getSignedDownloadUrl } = require('../services/storage');
+const { uploadFile, deleteFile, getSignedDownloadUrl, uploadImageWithThumbnail } = require('../services/storage');
 const { fetchLinkPreview } = require('../services/linkPreview');
 
 // All routes require authentication
@@ -316,8 +316,8 @@ router.post('/:id/items/photo', uploadImage.single('photo'), handleUploadError, 
       return forbidden(res, 'You are not a member of this household');
     }
 
-    // Upload photo to storage
-    const uploadResult = await uploadFile(
+    // Upload photo with thumbnail generation
+    const uploadResult = await uploadImageWithThumbnail(
       req.file.buffer,
       req.file.originalname,
       `boards/${board.householdId}`,
@@ -329,6 +329,7 @@ router.post('/:id/items/photo', uploadImage.single('photo'), handleUploadError, 
         boardId: id,
         type: 'photo',
         url: uploadResult.key, // Store key, not full URL
+        thumbnailUrl: uploadResult.thumbnailKey, // Store thumbnail key
         title: title || null,
         description: description || null,
         createdById: req.user.id
@@ -340,14 +341,12 @@ router.post('/:id/items/photo', uploadImage.single('photo'), handleUploadError, 
       }
     });
 
-    // Generate signed URL for response
-    const signedUrl = await getSignedDownloadUrl(uploadResult.key, 7 * 24 * 60 * 60);
-
     return created(res, {
       item: {
         id: item.id,
         type: item.type,
-        url: signedUrl,
+        url: uploadResult.url,
+        thumbnailUrl: uploadResult.thumbnailUrl,
         title: item.title,
         description: item.description,
         createdBy: item.createdBy,
@@ -491,6 +490,13 @@ router.delete('/:id/items/:itemId', async (req, res) => {
           await deleteFile(item.url);
         } catch (e) {
           console.error('Failed to delete photo:', e);
+        }
+      }
+      if (item.thumbnailUrl) {
+        try {
+          await deleteFile(item.thumbnailUrl);
+        } catch (e) {
+          console.error('Failed to delete thumbnail:', e);
         }
       }
       if (item.photoBackDrawingUrl) {

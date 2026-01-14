@@ -3,6 +3,7 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { s3Client, BUCKET_NAME } = require('../config/storage');
 const path = require('path');
 const crypto = require('crypto');
+const sharp = require('sharp');
 
 /**
  * Generate a unique filename with original extension
@@ -109,6 +110,79 @@ const isValidDocumentType = (mimeType) => ALLOWED_DOCUMENT_TYPES.includes(mimeTy
  */
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+/**
+ * Thumbnail configuration
+ */
+const THUMBNAIL_CONFIG = {
+  width: 400,
+  height: 400,
+  quality: 70,
+  format: 'webp'
+};
+
+/**
+ * Generate a thumbnail from an image buffer
+ * @param {Buffer} imageBuffer - Original image data
+ * @returns {Promise<Buffer>} - Thumbnail buffer in WebP format
+ */
+const generateThumbnail = async (imageBuffer) => {
+  return await sharp(imageBuffer)
+    .resize(THUMBNAIL_CONFIG.width, THUMBNAIL_CONFIG.height, {
+      fit: 'cover',
+      position: 'center'
+    })
+    .webp({ quality: THUMBNAIL_CONFIG.quality })
+    .toBuffer();
+};
+
+/**
+ * Upload an image with automatic thumbnail generation
+ * @param {Buffer} fileBuffer - The original image data
+ * @param {string} originalName - Original filename (for extension)
+ * @param {string} folder - Folder path
+ * @param {string} contentType - MIME type of the file
+ * @returns {Promise<{key: string, url: string, thumbnailKey: string, thumbnailUrl: string}>}
+ */
+const uploadImageWithThumbnail = async (fileBuffer, originalName, folder, contentType) => {
+  // Generate unique base name
+  const uniqueId = crypto.randomBytes(16).toString('hex');
+  const timestamp = Date.now();
+  const ext = path.extname(originalName);
+  const baseName = `${timestamp}-${uniqueId}`;
+
+  // Upload original image
+  const originalKey = `${folder}/${baseName}${ext}`;
+  const originalCommand = new PutObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: originalKey,
+    Body: fileBuffer,
+    ContentType: contentType
+  });
+  await s3Client.send(originalCommand);
+
+  // Generate and upload thumbnail
+  const thumbnailBuffer = await generateThumbnail(fileBuffer);
+  const thumbnailKey = `${folder}/thumbs/${baseName}.webp`;
+  const thumbnailCommand = new PutObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: thumbnailKey,
+    Body: thumbnailBuffer,
+    ContentType: 'image/webp'
+  });
+  await s3Client.send(thumbnailCommand);
+
+  // Generate signed URLs (7 days)
+  const url = await getSignedDownloadUrl(originalKey, 7 * 24 * 60 * 60);
+  const thumbnailUrl = await getSignedDownloadUrl(thumbnailKey, 7 * 24 * 60 * 60);
+
+  return {
+    key: originalKey,
+    url,
+    thumbnailKey,
+    thumbnailUrl
+  };
+};
+
 module.exports = {
   uploadFile,
   deleteFile,
@@ -116,7 +190,10 @@ module.exports = {
   getSignedDownloadUrl,
   isValidImageType,
   isValidDocumentType,
+  generateThumbnail,
+  uploadImageWithThumbnail,
   ALLOWED_IMAGE_TYPES,
   ALLOWED_DOCUMENT_TYPES,
-  MAX_FILE_SIZE
+  MAX_FILE_SIZE,
+  THUMBNAIL_CONFIG
 };

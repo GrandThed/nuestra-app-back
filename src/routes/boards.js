@@ -61,20 +61,43 @@ router.get('/', async (req, res) => {
       include: {
         _count: {
           select: { items: true }
+        },
+        items: {
+          take: 4,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            type: true,
+            thumbnailUrl: true,
+            linkPreviewImage: true,
+          }
         }
       },
       orderBy: { createdAt: 'desc' }
     });
 
-    return success(res, {
-      boards: boards.map(b => ({
+    // Map boards with preview items (signed URLs for photos)
+    const boardsWithPreviews = await Promise.all(boards.map(async b => {
+      const previewItems = await Promise.all(
+        b.items.map(async item => {
+          if (item.type === 'photo' && item.thumbnailUrl) {
+            return await getSignedDownloadUrl(item.thumbnailUrl, 7 * 24 * 60 * 60);
+          }
+          return item.linkPreviewImage; // Public URL for links
+        })
+      );
+
+      return {
         id: b.id,
         name: b.name,
         coverUrl: b.coverUrl,
         itemCount: b._count.items,
-        createdAt: b.createdAt
-      }))
-    });
+        createdAt: b.createdAt,
+        previewItems: previewItems.filter(Boolean)
+      };
+    }));
+
+    return success(res, { boards: boardsWithPreviews });
   } catch (err) {
     return serverError(res, err);
   }

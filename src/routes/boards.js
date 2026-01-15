@@ -485,12 +485,14 @@ router.patch('/:id/items/:itemId', uploadImage.single('drawing'), handleUploadEr
 router.delete('/:id/items/:itemId', async (req, res) => {
   try {
     const { id, itemId } = req.params;
+    console.log('DELETE item - boardId:', id, 'itemId:', itemId);
 
     const board = await prisma.board.findUnique({
       where: { id }
     });
 
     if (!board) {
+      console.log('Board not found for id:', id);
       return notFound(res, 'Board not found');
     }
 

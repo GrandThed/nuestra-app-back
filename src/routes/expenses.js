@@ -485,6 +485,7 @@ router.get('/', async (req, res) => {
     return success(res, {
       expenses: expenses.map(exp => ({
         id: exp.id,
+        householdId: exp.householdId,
         description: exp.description,
         amount: exp.amount,
         currency: exp.currency,
@@ -561,7 +562,7 @@ router.post('/', async (req, res) => {
           select: { id: true, name: true, icon: true }
         },
         paidBy: {
-          select: { id: true, name: true }
+          select: { id: true, name: true, avatarUrl: true }
         },
         splits: {
           include: {
@@ -683,7 +684,7 @@ router.patch('/:id', async (req, res) => {
           select: { id: true, name: true, icon: true }
         },
         paidBy: {
-          select: { id: true, name: true }
+          select: { id: true, name: true, avatarUrl: true }
         },
         splits: {
           include: {
@@ -698,6 +699,7 @@ router.patch('/:id', async (req, res) => {
     return success(res, {
       expense: {
         ...updated,
+        householdId: updated.householdId,
         allSettled: updated.splits.every(s => s.settled)
       }
     });

@@ -204,6 +204,43 @@ router.post('/:id/invite', async (req, res) => {
 });
 
 /**
+ * GET /api/households/:id/invites
+ * Get active (unused, non-expired) invites for household
+ */
+router.get('/:id/invites', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check membership
+    if (!isMember(req.user, id)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const now = new Date();
+    const invites = await prisma.householdInvite.findMany({
+      where: {
+        householdId: id,
+        usedAt: null,
+        expiresAt: { gt: now }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 1 // Only return the most recent active invite
+    });
+
+    const activeInvite = invites.length > 0 ? {
+      id: invites[0].id,
+      code: invites[0].code,
+      expiresAt: invites[0].expiresAt,
+      createdAt: invites[0].createdAt
+    } : null;
+
+    return success(res, { invite: activeInvite });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
  * POST /api/households/join
  * Join household with invite code
  */

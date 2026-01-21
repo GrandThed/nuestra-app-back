@@ -90,6 +90,7 @@ router.post('/', async (req, res) => {
     return created(res, {
       menuPlan: {
         id: menuPlan.id,
+        householdId: menuPlan.householdId,
         name: menuPlan.name,
         items: [],
         createdAt: menuPlan.createdAt
@@ -209,6 +210,7 @@ router.get('/:id', async (req, res) => {
     return success(res, {
       menuPlan: {
         id: menuPlan.id,
+        householdId: menuPlan.householdId,
         name: menuPlan.name,
         items: menuPlan.items.map(item => ({
           id: item.id,

@@ -42,7 +42,7 @@ app.get('/', (req, res) => {
   <meta property="og:title" content="HouseholdHub - Organiza tu hogar en pareja">
   <meta property="og:description" content="La app para parejas y familias que quieren organizar su vida juntos.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://householdhub.benja.ar">
+  <meta property="og:url" content="https://nuestra-app.benja.ar">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -329,7 +329,7 @@ app.get('/.well-known/apple-app-site-association', (req, res) => {
 app.get('/join/:code', (req, res) => {
   const { code } = req.params;
   const appScheme = 'householdhub';
-  const universalLink = `https://householdhub.benja.ar/join/${code}`;
+  const universalLink = `https://nuestra-app.benja.ar/join/${code}`;
 
   res.setHeader('Content-Type', 'text/html');
   res.send(`

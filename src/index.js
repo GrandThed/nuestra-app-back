@@ -37,9 +37,9 @@ app.get('/', (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HouseholdHub - Organiza tu hogar en pareja</title>
+  <title>Nuestra App - Organiza tu hogar</title>
   <meta name="description" content="La app para parejas y familias que quieren organizar su vida juntos. Tableros, recetas, menús, gastos compartidos y más.">
-  <meta property="og:title" content="HouseholdHub - Organiza tu hogar en pareja">
+  <meta property="og:title" content="Nuestra App - Organiza tu hogar">
   <meta property="og:description" content="La app para parejas y familias que quieren organizar su vida juntos.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://nuestra-app.benja.ar">
@@ -199,7 +199,7 @@ app.get('/', (req, res) => {
   <!-- Hero -->
   <section class="hero">
     <div class="hero-logo">🏠</div>
-    <h1>HouseholdHub</h1>
+    <h1>Nuestra App</h1>
     <p>La app para parejas y familias que quieren organizar su vida diaria juntos. Tableros compartidos, recetas, menús semanales, gastos divididos y más.</p>
     <div class="download-buttons">
       <a href="#" class="download-btn" onclick="alert('Próximamente en App Store'); return false;">
@@ -266,7 +266,7 @@ app.get('/', (req, res) => {
       </div>
       <div class="step">
         <div class="step-number">3</div>
-        <h3>Invita a tu pareja</h3>
+        <h3>Invita gente</h3>
         <p>Comparte un código de invitación y empiecen a organizarse juntos.</p>
       </div>
     </div>
@@ -289,7 +289,7 @@ app.get('/', (req, res) => {
 
   <!-- Footer -->
   <footer>
-    <p>© ${new Date().getFullYear()} HouseholdHub. Hecho con ❤️ para hogares felices.</p>
+    <p>© ${new Date().getFullYear()} Nuestra App. Hecho con ❤️ para hogares felices.</p>
   </footer>
 </body>
 </html>
@@ -338,7 +338,7 @@ app.get('/join/:code', (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Unirse a HouseholdHub</title>
+  <title>Unirse a Nuestra App</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {

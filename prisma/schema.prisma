@@ -50,12 +50,13 @@ model Household {
 }
 
 model HouseholdMember {
-  id          String   @id @default(uuid())
-  householdId String
-  userId      String
-  role        String   @default("member") // owner, member
-  income      Decimal? @db.Decimal(12, 2)
-  createdAt   DateTime @default(now())
+  id           String   @id @default(uuid())
+  householdId  String
+  userId       String
+  role         String   @default("member") // owner, member
+  income       Decimal? @db.Decimal(12, 2)
+  paysExpenses Boolean  @default(false) // if true, this member is responsible for paying household expenses
+  createdAt    DateTime @default(now())
 
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)

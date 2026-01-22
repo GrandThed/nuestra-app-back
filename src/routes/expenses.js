@@ -515,7 +515,7 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { householdId, description, amount, currency, date, categoryId, receiptUrl } = req.body;
+    const { householdId, description, amount, currency, date, categoryId, receiptUrl, paidById } = req.body;
 
     if (!householdId || !description || !amount || !date) {
       return error(res, 'householdId, description, amount, and date are required');
@@ -535,6 +535,17 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // If paidById is provided, verify that user is a member of the household
+    const effectivePaidById = paidById || req.user.id;
+    if (paidById) {
+      const paidByMember = await prisma.householdMember.findFirst({
+        where: { householdId, userId: paidById }
+      });
+      if (!paidByMember) {
+        return error(res, 'The specified payer is not a member of this household');
+      }
+    }
+
     // Calculate splits
     const splits = await calculateSplits(householdId, amount);
 
@@ -548,7 +559,7 @@ router.post('/', async (req, res) => {
         date: new Date(date),
         categoryId: categoryId || null,
         receiptUrl: receiptUrl || null,
-        paidById: req.user.id,
+        paidById: effectivePaidById,
         splits: {
           create: splits.map(s => ({
             userId: s.userId,

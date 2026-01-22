@@ -89,7 +89,8 @@ router.post('/', async (req, res) => {
           email: m.user.email,
           avatarUrl: m.user.avatarUrl,
           role: m.role,
-          income: m.income
+          income: m.income,
+          paysExpenses: m.paysExpenses
         }))
       }
     });
@@ -141,7 +142,8 @@ router.get('/:id', async (req, res) => {
           email: m.user.email,
           avatarUrl: m.user.avatarUrl,
           role: m.role,
-          income: m.income
+          income: m.income,
+          paysExpenses: m.paysExpenses
         }))
       }
     });
@@ -320,7 +322,8 @@ router.post('/join', async (req, res) => {
           email: m.user.email,
           avatarUrl: m.user.avatarUrl,
           role: m.role,
-          income: m.income
+          income: m.income,
+          paysExpenses: m.paysExpenses
         }))
       }
     });
@@ -392,7 +395,8 @@ router.patch('/:id', async (req, res) => {
           email: m.user.email,
           avatarUrl: m.user.avatarUrl,
           role: m.role,
-          income: m.income
+          income: m.income,
+          paysExpenses: m.paysExpenses
         }))
       }
     });
@@ -403,21 +407,21 @@ router.patch('/:id', async (req, res) => {
 
 /**
  * PATCH /api/households/:id/members/:userId
- * Update member info (income)
+ * Update member info (income, paysExpenses)
  */
 router.patch('/:id/members/:userId', async (req, res) => {
   try {
     const { id, userId } = req.params;
-    const { income } = req.body;
+    const { income, paysExpenses } = req.body;
 
     // Check membership
     if (!isMember(req.user, id)) {
       return forbidden(res, 'You are not a member of this household');
     }
 
-    // Users can only update their own income (or owners can update anyone)
+    // Users can only update their own settings (or owners can update anyone)
     if (req.user.id !== userId && !isOwner(req.user, id)) {
-      return forbidden(res, 'You can only update your own income');
+      return forbidden(res, 'You can only update your own settings');
     }
 
     const member = await prisma.householdMember.findFirst({
@@ -428,9 +432,14 @@ router.patch('/:id/members/:userId', async (req, res) => {
       return notFound(res, 'Member not found');
     }
 
+    // Build update data
+    const updateData = {};
+    if (income !== undefined) updateData.income = income;
+    if (paysExpenses !== undefined) updateData.paysExpenses = paysExpenses;
+
     const updated = await prisma.householdMember.update({
       where: { id: member.id },
-      data: { income },
+      data: updateData,
       include: {
         user: {
           select: { id: true, name: true, email: true, avatarUrl: true }
@@ -446,7 +455,8 @@ router.patch('/:id/members/:userId', async (req, res) => {
         email: updated.user.email,
         avatarUrl: updated.user.avatarUrl,
         role: updated.role,
-        income: updated.income
+        income: updated.income,
+        paysExpenses: updated.paysExpenses
       }
     });
   } catch (err) {

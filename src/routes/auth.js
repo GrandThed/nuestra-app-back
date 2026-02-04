@@ -8,26 +8,47 @@ const { authenticate } = require('../middleware/auth');
 
 /**
  * POST /auth/google
- * Authenticate with Google ID token (from Flutter)
+ * Authenticate with Google ID token or access token (from Flutter)
+ * - idToken: Used on mobile platforms
+ * - accessToken: Used on web (google_sign_in_web doesn't return idToken)
  */
 router.post('/google', async (req, res) => {
   try {
-    const { idToken } = req.body;
+    const { idToken, accessToken } = req.body;
 
-    if (!idToken) {
-      return error(res, 'idToken is required');
+    if (!idToken && !accessToken) {
+      return error(res, 'idToken or accessToken is required');
     }
 
-    // Verify Google token
-    const googleResponse = await axios.get(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
-    );
+    let email, name, picture, googleId;
 
-    const { email, name, picture, sub: googleId } = googleResponse.data;
+    if (idToken) {
+      // Verify Google ID token (mobile flow)
+      const googleResponse = await axios.get(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
+      );
 
-    // Check if Google client ID matches (security check)
-    if (googleResponse.data.aud !== process.env.GOOGLE_CLIENT_ID) {
-      return unauthorized(res, 'Invalid Google client');
+      email = googleResponse.data.email;
+      name = googleResponse.data.name;
+      picture = googleResponse.data.picture;
+      googleId = googleResponse.data.sub;
+
+      // Check if Google client ID matches (security check)
+      if (googleResponse.data.aud !== process.env.GOOGLE_CLIENT_ID) {
+        return unauthorized(res, 'Invalid Google client');
+      }
+    } else {
+      // Verify Google access token (web flow)
+      // Use userinfo endpoint to get user details
+      const userInfoResponse = await axios.get(
+        'https://www.googleapis.com/oauth2/v3/userinfo',
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      email = userInfoResponse.data.email;
+      name = userInfoResponse.data.name;
+      picture = userInfoResponse.data.picture;
+      googleId = userInfoResponse.data.sub;
     }
 
     // Find or create user

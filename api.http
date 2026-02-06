@@ -27,16 +27,6 @@ GET {{baseUrl}}/api
 ### Authentication
 ### ============================================
 
-### DEV LOGIN - Create test user and get JWT (disabled in production)
-### Use this to get a token for testing authenticated endpoints
-POST {{baseUrl}}/auth/dev-login
-Content-Type: application/json
-
-{
-  "email": "testuser@example.com",
-  "name": "Test User"
-}
-
 ### Google OAuth (send token from Flutter)
 POST {{baseUrl}}/auth/google
 Content-Type: application/json

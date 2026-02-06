@@ -184,48 +184,4 @@ router.get('/me', authenticate, async (req, res) => {
   }
 });
 
-/**
- * POST /auth/dev-login
- * Development only: Create a test user and return JWT
- * This endpoint is disabled in production
- */
-router.post('/dev-login', async (req, res) => {
-  // Only allow in non-production environments
-  if (process.env.NODE_ENV === 'production') {
-    return error(res, 'This endpoint is disabled in production', 403);
-  }
-
-  try {
-    const testEmail = req.body.email || 'testuser@example.com';
-    const testName = req.body.name || 'Test User';
-
-    // Find or create test user
-    let user = await prisma.user.upsert({
-      where: { email: testEmail },
-      update: { name: testName },
-      create: {
-        email: testEmail,
-        name: testName,
-        provider: 'dev',
-        providerId: 'dev-' + Date.now()
-      }
-    });
-
-    // Generate JWT
-    const token = generateToken(user);
-
-    return success(res, {
-      message: 'Development login successful',
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name
-      }
-    });
-  } catch (err) {
-    return serverError(res, err);
-  }
-});
-
 module.exports = router;

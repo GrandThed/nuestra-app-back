@@ -329,7 +329,7 @@ app.get('/.well-known/apple-app-site-association', (req, res) => {
 app.get('/join/:code', (req, res) => {
   const { code } = req.params;
   const appScheme = 'householdhub';
-  const universalLink = `https://nuestra-app.benja.ar/join/${code}`;
+  const webAppUrl = `https://nuestra-app-web.benja.ar/join/${code}`;
 
   res.setHeader('Content-Type', 'text/html');
   res.send(`
@@ -390,10 +390,28 @@ app.get('/join/:code', (req, res) => {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
     }
+    .btn-web {
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+      color: white;
+    }
     .btn-secondary {
       background: #f5f5f5;
       color: #333;
     }
+    .divider {
+      display: flex;
+      align-items: center;
+      margin: 20px 0;
+      color: #999;
+      font-size: 14px;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #ddd;
+    }
+    .divider span { padding: 0 12px; }
     .hint { color: #999; font-size: 14px; margin-top: 16px; }
   </style>
 </head>
@@ -401,25 +419,32 @@ app.get('/join/:code', (req, res) => {
   <div class="card">
     <div class="logo">🏠</div>
     <h1>Te invitaron a un hogar</h1>
-    <p>Usa este código para unirte en la app</p>
+    <p>Usa este código para unirte</p>
     <div class="code">${code}</div>
     <a href="${appScheme}://join/${code}" class="btn btn-primary" id="openApp">
       Abrir en la app
     </a>
+    <div class="divider"><span>o</span></div>
+    <a href="${webAppUrl}" class="btn btn-web">
+      Unirse desde el navegador
+    </a>
     <button class="btn btn-secondary" onclick="copyCode()">
       Copiar código
     </button>
-    <p class="hint">Si no tienes la app instalada, descárgala primero</p>
+    <p class="hint">¿No tienes la app? Únete desde el navegador o descárgala</p>
   </div>
   <script>
     function copyCode() {
       navigator.clipboard.writeText('${code}');
       alert('Código copiado: ${code}');
     }
-    // Try to open the app automatically
-    setTimeout(() => {
-      window.location.href = '${appScheme}://join/${code}';
-    }, 100);
+    // Try to open the app automatically on mobile
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      setTimeout(() => {
+        window.location.href = '${appScheme}://join/${code}';
+      }, 100);
+    }
   </script>
 </body>
 </html>

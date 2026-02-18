@@ -89,7 +89,7 @@ router.post('/', async (req, res) => {
           email: m.user.email,
           avatarUrl: m.user.avatarUrl,
           role: m.role,
-          income: m.income,
+          income: m.income != null ? Number(m.income) : null,
           paysExpenses: m.paysExpenses
         }))
       }
@@ -142,7 +142,7 @@ router.get('/:id', async (req, res) => {
           email: m.user.email,
           avatarUrl: m.user.avatarUrl,
           role: m.role,
-          income: m.income,
+          income: m.income != null ? Number(m.income) : null,
           paysExpenses: m.paysExpenses
         }))
       }
@@ -322,7 +322,7 @@ router.post('/join', async (req, res) => {
           email: m.user.email,
           avatarUrl: m.user.avatarUrl,
           role: m.role,
-          income: m.income,
+          income: m.income != null ? Number(m.income) : null,
           paysExpenses: m.paysExpenses
         }))
       }
@@ -395,7 +395,7 @@ router.patch('/:id', async (req, res) => {
           email: m.user.email,
           avatarUrl: m.user.avatarUrl,
           role: m.role,
-          income: m.income,
+          income: m.income != null ? Number(m.income) : null,
           paysExpenses: m.paysExpenses
         }))
       }
@@ -455,7 +455,7 @@ router.patch('/:id/members/:userId', async (req, res) => {
         email: updated.user.email,
         avatarUrl: updated.user.avatarUrl,
         role: updated.role,
-        income: updated.income,
+        income: updated.income != null ? Number(updated.income) : null,
         paysExpenses: updated.paysExpenses
       }
     });

@@ -510,4 +510,68 @@ router.delete('/:id/members/:userId', async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/households/:id
+ * Delete household and all associated data (owner only)
+ */
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Only owners can delete household
+    if (!isOwner(req.user, id)) {
+      return forbidden(res, 'Only owners can delete the household');
+    }
+
+    // Collect all S3 file keys for cleanup
+    const fileKeys = [];
+
+    // Board item files (photos, thumbnails, drawings)
+    const boardItems = await prisma.boardItem.findMany({
+      where: { board: { householdId: id }, type: 'photo' },
+      select: { url: true, thumbnailUrl: true, photoBackDrawingUrl: true }
+    });
+    for (const item of boardItems) {
+      if (item.url) fileKeys.push(item.url);
+      if (item.thumbnailUrl) fileKeys.push(item.thumbnailUrl);
+      if (item.photoBackDrawingUrl) fileKeys.push(item.photoBackDrawingUrl);
+    }
+
+    // Recipe images
+    const recipes = await prisma.recipe.findMany({
+      where: { householdId: id },
+      select: { imageUrl: true }
+    });
+    for (const recipe of recipes) {
+      if (recipe.imageUrl) fileKeys.push(recipe.imageUrl);
+    }
+
+    // Expense receipts
+    const expenses = await prisma.expense.findMany({
+      where: { householdId: id },
+      select: { receiptUrl: true }
+    });
+    for (const expense of expenses) {
+      if (expense.receiptUrl) fileKeys.push(expense.receiptUrl);
+    }
+
+    // Best-effort S3 cleanup
+    const { deleteFile } = require('../services/storage');
+    for (const key of fileKeys) {
+      try {
+        await deleteFile(key);
+      } catch (e) {
+        console.error(`Failed to delete file ${key}:`, e.message);
+      }
+    }
+
+    // Delete household (cascades to all related records)
+    await prisma.household.delete({ where: { id } });
+
+    return res.status(204).send();
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
 module.exports = router;

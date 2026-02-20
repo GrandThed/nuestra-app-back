@@ -6,6 +6,7 @@ const { authenticate } = require('../middleware/auth');
 const { uploadImage, handleUploadError } = require('../middleware/upload');
 const { uploadFile, deleteFile, getSignedDownloadUrl, uploadImageWithThumbnail } = require('../services/storage');
 const { fetchLinkPreview } = require('../services/linkPreview');
+const { logActivity } = require('../services/activityLogger');
 
 // All routes require authentication
 router.use(authenticate);
@@ -39,6 +40,185 @@ const refreshItemUrls = async (item) => {
 
   return refreshed;
 };
+
+// ==================== TAGS CRUD ====================
+// IMPORTANT: These must be BEFORE /:id routes to avoid conflicts
+
+/**
+ * GET /api/boards/tags
+ * List all tags for a household
+ */
+router.get('/tags', async (req, res) => {
+  try {
+    const { householdId } = req.query;
+
+    if (!householdId) {
+      return error(res, 'householdId is required');
+    }
+
+    if (!isMember(req.user, householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const tags = await prisma.tag.findMany({
+      where: { householdId },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    return success(res, { tags });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/boards/tags
+ * Create a new tag for a household
+ */
+router.post('/tags', async (req, res) => {
+  try {
+    const { householdId, name, color } = req.body;
+
+    if (!householdId || !name) {
+      return error(res, 'householdId and name are required');
+    }
+
+    if (!isMember(req.user, householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const tag = await prisma.tag.create({
+      data: {
+        householdId,
+        name: name.trim(),
+        color: color || '#667eea'
+      }
+    });
+
+    await logActivity({
+      householdId,
+      userId: req.user.id,
+      action: 'created',
+      entityType: 'tag',
+      entityId: tag.id,
+      metadata: { name: tag.name, color: tag.color }
+    });
+
+    return created(res, { tag });
+  } catch (err) {
+    // Handle unique constraint violation (duplicate tag name in household)
+    if (err.code === 'P2002') {
+      return error(res, 'A tag with this name already exists in this household');
+    }
+    return serverError(res, err);
+  }
+});
+
+/**
+ * DELETE /api/boards/tags/:tagId
+ * Delete a tag
+ */
+router.delete('/tags/:tagId', async (req, res) => {
+  try {
+    const { tagId } = req.params;
+
+    const tag = await prisma.tag.findUnique({
+      where: { id: tagId }
+    });
+
+    if (!tag) {
+      return notFound(res, 'Tag not found');
+    }
+
+    if (!isMember(req.user, tag.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    await prisma.tag.delete({
+      where: { id: tagId }
+    });
+
+    await logActivity({
+      householdId: tag.householdId,
+      userId: req.user.id,
+      action: 'deleted',
+      entityType: 'tag',
+      entityId: tagId,
+      metadata: { name: tag.name }
+    });
+
+    return noContent(res);
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+// ==================== TEMPLATES ====================
+
+/**
+ * GET /api/boards/templates
+ * Return predefined board templates
+ */
+router.get('/templates', async (req, res) => {
+  try {
+    const templates = [
+      {
+        id: 'home-decor',
+        name: 'Home Decor',
+        description: 'Ideas and inspiration for decorating your home',
+        icon: 'home'
+      },
+      {
+        id: 'travel',
+        name: 'Travel Plans',
+        description: 'Destinations, hotels, and travel inspiration',
+        icon: 'flight'
+      },
+      {
+        id: 'recipes',
+        name: 'Recipe Ideas',
+        description: 'Dishes and recipes to try together',
+        icon: 'restaurant'
+      },
+      {
+        id: 'gift-ideas',
+        name: 'Gift Ideas',
+        description: 'Gift inspiration for each other and friends/family',
+        icon: 'card_giftcard'
+      },
+      {
+        id: 'diy-projects',
+        name: 'DIY Projects',
+        description: 'Home improvement and craft projects',
+        icon: 'build'
+      },
+      {
+        id: 'fashion',
+        name: 'Fashion & Style',
+        description: 'Outfit ideas and style inspiration',
+        icon: 'checkroom'
+      },
+      {
+        id: 'garden',
+        name: 'Garden & Plants',
+        description: 'Gardening ideas and plant care tips',
+        icon: 'yard'
+      },
+      {
+        id: 'date-nights',
+        name: 'Date Night Ideas',
+        description: 'Activities and places for date nights',
+        icon: 'favorite'
+      }
+    ];
+
+    return success(res, { templates });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+// ==================== BOARD CRUD ====================
 
 /**
  * GET /api/boards
@@ -538,6 +718,351 @@ router.delete('/:id/items/:itemId', async (req, res) => {
     });
 
     return noContent(res);
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+// ==================== TAG ITEMS ====================
+
+/**
+ * POST /api/boards/:id/items/:itemId/tags
+ * Add a tag to a board item
+ */
+router.post('/:id/items/:itemId/tags', async (req, res) => {
+  try {
+    const { id, itemId } = req.params;
+    const { tagId } = req.body;
+
+    if (!tagId) {
+      return error(res, 'tagId is required');
+    }
+
+    const board = await prisma.board.findUnique({
+      where: { id }
+    });
+
+    if (!board) {
+      return notFound(res, 'Board not found');
+    }
+
+    if (!isMember(req.user, board.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const item = await prisma.boardItem.findUnique({
+      where: { id: itemId }
+    });
+
+    if (!item || item.boardId !== id) {
+      return notFound(res, 'Item not found');
+    }
+
+    // Verify tag belongs to the same household
+    const tag = await prisma.tag.findUnique({
+      where: { id: tagId }
+    });
+
+    if (!tag || tag.householdId !== board.householdId) {
+      return notFound(res, 'Tag not found');
+    }
+
+    const boardItemTag = await prisma.boardItemTag.create({
+      data: {
+        boardItemId: itemId,
+        tagId
+      },
+      include: {
+        tag: true
+      }
+    });
+
+    await logActivity({
+      householdId: board.householdId,
+      userId: req.user.id,
+      action: 'created',
+      entityType: 'board_item',
+      entityId: itemId,
+      metadata: { action: 'tag_added', tagName: tag.name, boardName: board.name }
+    });
+
+    return created(res, { boardItemTag });
+  } catch (err) {
+    // Handle unique constraint violation (tag already on item)
+    if (err.code === 'P2002') {
+      return error(res, 'This tag is already applied to this item');
+    }
+    return serverError(res, err);
+  }
+});
+
+/**
+ * DELETE /api/boards/:id/items/:itemId/tags/:tagId
+ * Remove a tag from a board item
+ */
+router.delete('/:id/items/:itemId/tags/:tagId', async (req, res) => {
+  try {
+    const { id, itemId, tagId } = req.params;
+
+    const board = await prisma.board.findUnique({
+      where: { id }
+    });
+
+    if (!board) {
+      return notFound(res, 'Board not found');
+    }
+
+    if (!isMember(req.user, board.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const item = await prisma.boardItem.findUnique({
+      where: { id: itemId }
+    });
+
+    if (!item || item.boardId !== id) {
+      return notFound(res, 'Item not found');
+    }
+
+    const boardItemTag = await prisma.boardItemTag.findUnique({
+      where: {
+        boardItemId_tagId: {
+          boardItemId: itemId,
+          tagId
+        }
+      }
+    });
+
+    if (!boardItemTag) {
+      return notFound(res, 'Tag not applied to this item');
+    }
+
+    await prisma.boardItemTag.delete({
+      where: { id: boardItemTag.id }
+    });
+
+    await logActivity({
+      householdId: board.householdId,
+      userId: req.user.id,
+      action: 'deleted',
+      entityType: 'board_item',
+      entityId: itemId,
+      metadata: { action: 'tag_removed', tagId }
+    });
+
+    return noContent(res);
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+// ==================== COMMENTS / REACTIONS ====================
+
+/**
+ * GET /api/boards/:id/items/:itemId/comments
+ * List comments for a board item
+ */
+router.get('/:id/items/:itemId/comments', async (req, res) => {
+  try {
+    const { id, itemId } = req.params;
+
+    const board = await prisma.board.findUnique({
+      where: { id }
+    });
+
+    if (!board) {
+      return notFound(res, 'Board not found');
+    }
+
+    if (!isMember(req.user, board.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const item = await prisma.boardItem.findUnique({
+      where: { id: itemId }
+    });
+
+    if (!item || item.boardId !== id) {
+      return notFound(res, 'Item not found');
+    }
+
+    const comments = await prisma.boardItemComment.findMany({
+      where: { boardItemId: itemId },
+      include: {
+        user: {
+          select: { id: true, name: true, avatarUrl: true }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    return success(res, { comments });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/boards/:id/items/:itemId/comments
+ * Add a comment or reaction to a board item
+ */
+router.post('/:id/items/:itemId/comments', async (req, res) => {
+  try {
+    const { id, itemId } = req.params;
+    const { content, emoji } = req.body;
+
+    if (!content && !emoji) {
+      return error(res, 'content or emoji is required');
+    }
+
+    const board = await prisma.board.findUnique({
+      where: { id }
+    });
+
+    if (!board) {
+      return notFound(res, 'Board not found');
+    }
+
+    if (!isMember(req.user, board.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const item = await prisma.boardItem.findUnique({
+      where: { id: itemId }
+    });
+
+    if (!item || item.boardId !== id) {
+      return notFound(res, 'Item not found');
+    }
+
+    const comment = await prisma.boardItemComment.create({
+      data: {
+        boardItemId: itemId,
+        userId: req.user.id,
+        content: content || null,
+        emoji: emoji || null
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, avatarUrl: true }
+        }
+      }
+    });
+
+    await logActivity({
+      householdId: board.householdId,
+      userId: req.user.id,
+      action: 'created',
+      entityType: 'comment',
+      entityId: comment.id,
+      metadata: { boardItemId: itemId, emoji: emoji || undefined }
+    });
+
+    return created(res, { comment });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * DELETE /api/boards/:id/items/:itemId/comments/:commentId
+ * Delete a comment from a board item
+ */
+router.delete('/:id/items/:itemId/comments/:commentId', async (req, res) => {
+  try {
+    const { id, itemId, commentId } = req.params;
+
+    const board = await prisma.board.findUnique({
+      where: { id }
+    });
+
+    if (!board) {
+      return notFound(res, 'Board not found');
+    }
+
+    if (!isMember(req.user, board.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const comment = await prisma.boardItemComment.findUnique({
+      where: { id: commentId }
+    });
+
+    if (!comment || comment.boardItemId !== itemId) {
+      return notFound(res, 'Comment not found');
+    }
+
+    // Only the comment author can delete their comment
+    if (comment.userId !== req.user.id) {
+      return forbidden(res, 'You can only delete your own comments');
+    }
+
+    await prisma.boardItemComment.delete({
+      where: { id: commentId }
+    });
+
+    await logActivity({
+      householdId: board.householdId,
+      userId: req.user.id,
+      action: 'deleted',
+      entityType: 'comment',
+      entityId: commentId,
+      metadata: { boardItemId: itemId }
+    });
+
+    return noContent(res);
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+// ==================== REORDER ====================
+
+/**
+ * PATCH /api/boards/:id/items/reorder
+ * Reorder board items
+ */
+router.patch('/:id/items/reorder', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { items } = req.body;
+
+    if (!items || !Array.isArray(items)) {
+      return error(res, 'items array is required');
+    }
+
+    const board = await prisma.board.findUnique({
+      where: { id }
+    });
+
+    if (!board) {
+      return notFound(res, 'Board not found');
+    }
+
+    if (!isMember(req.user, board.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    // Update sortOrder for each item in a transaction
+    await prisma.$transaction(
+      items.map(({ id: itemId, sortOrder }) =>
+        prisma.boardItem.update({
+          where: { id: itemId },
+          data: { sortOrder }
+        })
+      )
+    );
+
+    await logActivity({
+      householdId: board.householdId,
+      userId: req.user.id,
+      action: 'updated',
+      entityType: 'board',
+      entityId: id,
+      metadata: { action: 'items_reordered', itemCount: items.length }
+    });
+
+    return success(res, { message: 'Items reordered successfully' });
   } catch (err) {
     return serverError(res, err);
   }

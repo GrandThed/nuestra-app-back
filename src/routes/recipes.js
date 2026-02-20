@@ -5,6 +5,7 @@ const { success, created, error, forbidden, notFound, serverError, noContent } =
 const { authenticate } = require('../middleware/auth');
 const { uploadImage, handleUploadError } = require('../middleware/upload');
 const { uploadFile, deleteFile, getSignedDownloadUrl } = require('../services/storage');
+const { logActivity } = require('../services/activityLogger');
 
 // All routes require authentication
 router.use(authenticate);
@@ -67,10 +68,11 @@ const refreshImageUrl = async (recipe) => {
 /**
  * GET /api/recipes
  * List all recipes for a household
+ * Query params: householdId, search, inSeason, favorites, maxPrepTime, maxCookTime
  */
 router.get('/', async (req, res) => {
   try {
-    const { householdId, search, inSeason } = req.query;
+    const { householdId, search, inSeason, favorites, maxPrepTime, maxCookTime } = req.query;
 
     if (!householdId) {
       return error(res, 'householdId is required');
@@ -87,6 +89,23 @@ router.get('/', async (req, res) => {
       where.title = { contains: search, mode: 'insensitive' };
     }
 
+    // Filter by favorites for current user
+    if (favorites === 'true') {
+      where.favorites = {
+        some: { userId: req.user.id }
+      };
+    }
+
+    // Filter by prep time
+    if (maxPrepTime) {
+      where.prepTimeMinutes = { lte: parseInt(maxPrepTime, 10) };
+    }
+
+    // Filter by cook time
+    if (maxCookTime) {
+      where.cookTimeMinutes = { lte: parseInt(maxCookTime, 10) };
+    }
+
     const recipes = await prisma.recipe.findMany({
       where,
       include: {
@@ -95,6 +114,13 @@ router.get('/', async (req, res) => {
         },
         _count: {
           select: { menuItems: true }
+        },
+        ratings: {
+          select: { rating: true }
+        },
+        favorites: {
+          where: { userId: req.user.id },
+          select: { id: true }
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -104,13 +130,24 @@ router.get('/', async (req, res) => {
     const recipesWithUrls = await Promise.all(
       recipes.map(async (recipe) => {
         const refreshed = await refreshImageUrl(recipe);
+
+        // Calculate average rating
+        const ratingsArr = refreshed.ratings || [];
+        const averageRating = ratingsArr.length > 0
+          ? ratingsArr.reduce((sum, r) => sum + r.rating, 0) / ratingsArr.length
+          : null;
+
         return {
           id: refreshed.id,
           title: refreshed.title,
           imageUrl: refreshed.imageUrl,
           servings: refreshed.servings,
+          prepTimeMinutes: refreshed.prepTimeMinutes,
+          cookTimeMinutes: refreshed.cookTimeMinutes,
           ingredientCount: Array.isArray(refreshed.ingredients) ? refreshed.ingredients.length : 0,
           usedInMenus: refreshed._count.menuItems,
+          averageRating,
+          isFavorite: refreshed.favorites.length > 0,
           createdBy: refreshed.createdBy,
           createdAt: refreshed.createdAt
         };
@@ -129,7 +166,7 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { householdId, title, ingredients, instructions, servings, sourceUrl } = req.body;
+    const { householdId, title, ingredients, instructions, servings, sourceUrl, prepTimeMinutes, cookTimeMinutes } = req.body;
 
     if (!householdId || !title) {
       return error(res, 'householdId and title are required');
@@ -147,6 +184,8 @@ router.post('/', async (req, res) => {
         instructions: instructions || [],
         servings: servings || null,
         sourceUrl: sourceUrl || null,
+        prepTimeMinutes: prepTimeMinutes != null ? parseInt(prepTimeMinutes, 10) : null,
+        cookTimeMinutes: cookTimeMinutes != null ? parseInt(cookTimeMinutes, 10) : null,
         createdById: req.user.id
       },
       include: {
@@ -154,6 +193,15 @@ router.post('/', async (req, res) => {
           select: { id: true, name: true, avatarUrl: true }
         }
       }
+    });
+
+    await logActivity({
+      householdId,
+      userId: req.user.id,
+      action: 'created',
+      entityType: 'recipe',
+      entityId: recipe.id,
+      metadata: { title: recipe.title }
     });
 
     return created(res, {
@@ -165,6 +213,8 @@ router.post('/', async (req, res) => {
         imageUrl: recipe.imageUrl,
         servings: recipe.servings,
         sourceUrl: recipe.sourceUrl,
+        prepTimeMinutes: recipe.prepTimeMinutes,
+        cookTimeMinutes: recipe.cookTimeMinutes,
         createdBy: recipe.createdBy,
         createdAt: recipe.createdAt
       }
@@ -227,6 +277,96 @@ router.get('/seasonal-vegetables', async (req, res) => {
 });
 
 /**
+ * POST /api/recipes/import-url
+ * Import a recipe from a URL (placeholder - actual AI extraction uses n8n)
+ * NOTE: This route MUST be defined before /:id routes
+ */
+router.post('/import-url', async (req, res) => {
+  try {
+    const { householdId, url } = req.body;
+
+    if (!householdId || !url) {
+      return error(res, 'householdId and url are required');
+    }
+
+    if (!isMember(req.user, householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    // Basic URL validation
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch (e) {
+      return error(res, 'Invalid URL provided');
+    }
+
+    // Fetch the page to extract the title
+    let pageTitle = parsedUrl.hostname;
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'HouseholdHub/1.0' },
+        signal: AbortSignal.timeout(10000)
+      });
+      const html = await response.text();
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+      if (titleMatch && titleMatch[1]) {
+        pageTitle = titleMatch[1].trim();
+      }
+    } catch (e) {
+      console.error('Failed to fetch URL for title extraction:', e.message);
+      // Continue with hostname as title
+    }
+
+    // Create a placeholder recipe with the URL and extracted title
+    const recipe = await prisma.recipe.create({
+      data: {
+        householdId,
+        title: pageTitle,
+        ingredients: [],
+        instructions: [],
+        sourceUrl: url,
+        createdById: req.user.id
+      },
+      include: {
+        createdBy: {
+          select: { id: true, name: true, avatarUrl: true }
+        }
+      }
+    });
+
+    await logActivity({
+      householdId,
+      userId: req.user.id,
+      action: 'created',
+      entityType: 'recipe',
+      entityId: recipe.id,
+      metadata: { title: recipe.title, source: 'url_import' }
+    });
+
+    return created(res, {
+      recipe: {
+        id: recipe.id,
+        title: recipe.title,
+        ingredients: recipe.ingredients,
+        instructions: recipe.instructions,
+        imageUrl: recipe.imageUrl,
+        servings: recipe.servings,
+        sourceUrl: recipe.sourceUrl,
+        prepTimeMinutes: recipe.prepTimeMinutes,
+        cookTimeMinutes: recipe.cookTimeMinutes,
+        createdBy: recipe.createdBy,
+        createdAt: recipe.createdAt
+      },
+      imported: false,
+      message: 'Recipe placeholder created from URL. Full extraction requires n8n workflow.'
+    });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
  * GET /api/recipes/:id
  * Get recipe details
  */
@@ -242,6 +382,18 @@ router.get('/:id', async (req, res) => {
         },
         household: {
           select: { hemisphere: true }
+        },
+        ratings: {
+          include: {
+            user: {
+              select: { id: true, name: true, avatarUrl: true }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        },
+        favorites: {
+          where: { userId: req.user.id },
+          select: { id: true }
         }
       }
     });
@@ -280,6 +432,16 @@ router.get('/:id', async (req, res) => {
       }
     }
 
+    // Format ratings for response
+    const ratingsFormatted = refreshed.ratings.map(r => ({
+      id: r.id,
+      rating: r.rating,
+      note: r.note,
+      user: r.user,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt
+    }));
+
     return success(res, {
       recipe: {
         id: refreshed.id,
@@ -289,6 +451,10 @@ router.get('/:id', async (req, res) => {
         imageUrl: refreshed.imageUrl,
         servings: refreshed.servings,
         sourceUrl: refreshed.sourceUrl,
+        prepTimeMinutes: refreshed.prepTimeMinutes,
+        cookTimeMinutes: refreshed.cookTimeMinutes,
+        ratings: ratingsFormatted,
+        isFavorite: refreshed.favorites.length > 0,
         createdBy: refreshed.createdBy,
         createdAt: refreshed.createdAt,
         seasonality: {
@@ -310,7 +476,7 @@ router.get('/:id', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, ingredients, instructions, servings, sourceUrl } = req.body;
+    const { title, ingredients, instructions, servings, sourceUrl, prepTimeMinutes, cookTimeMinutes } = req.body;
 
     const recipe = await prisma.recipe.findUnique({
       where: { id }
@@ -330,6 +496,8 @@ router.patch('/:id', async (req, res) => {
     if (instructions !== undefined) updateData.instructions = instructions;
     if (servings !== undefined) updateData.servings = servings;
     if (sourceUrl !== undefined) updateData.sourceUrl = sourceUrl;
+    if (prepTimeMinutes !== undefined) updateData.prepTimeMinutes = prepTimeMinutes != null ? parseInt(prepTimeMinutes, 10) : null;
+    if (cookTimeMinutes !== undefined) updateData.cookTimeMinutes = cookTimeMinutes != null ? parseInt(cookTimeMinutes, 10) : null;
 
     const updated = await prisma.recipe.update({
       where: { id },
@@ -343,6 +511,15 @@ router.patch('/:id', async (req, res) => {
 
     const refreshed = await refreshImageUrl(updated);
 
+    await logActivity({
+      householdId: recipe.householdId,
+      userId: req.user.id,
+      action: 'updated',
+      entityType: 'recipe',
+      entityId: recipe.id,
+      metadata: { title: refreshed.title }
+    });
+
     return success(res, {
       recipe: {
         id: refreshed.id,
@@ -352,6 +529,8 @@ router.patch('/:id', async (req, res) => {
         imageUrl: refreshed.imageUrl,
         servings: refreshed.servings,
         sourceUrl: refreshed.sourceUrl,
+        prepTimeMinutes: refreshed.prepTimeMinutes,
+        cookTimeMinutes: refreshed.cookTimeMinutes,
         createdBy: refreshed.createdBy,
         createdAt: refreshed.createdAt
       }
@@ -416,6 +595,201 @@ router.post('/:id/image', uploadImage.single('image'), handleUploadError, async 
 });
 
 /**
+ * POST /api/recipes/:id/rating
+ * Create or update a rating for a recipe
+ */
+router.post('/:id/rating', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating, note } = req.body;
+
+    if (!rating || rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+      return error(res, 'rating is required and must be an integer between 1 and 5');
+    }
+
+    const recipe = await prisma.recipe.findUnique({
+      where: { id }
+    });
+
+    if (!recipe) {
+      return notFound(res, 'Recipe not found');
+    }
+
+    if (!isMember(req.user, recipe.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const recipeRating = await prisma.recipeRating.upsert({
+      where: {
+        recipeId_userId: {
+          recipeId: id,
+          userId: req.user.id
+        }
+      },
+      update: {
+        rating,
+        note: note !== undefined ? note : undefined
+      },
+      create: {
+        recipeId: id,
+        userId: req.user.id,
+        rating,
+        note: note || null
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, avatarUrl: true }
+        }
+      }
+    });
+
+    await logActivity({
+      householdId: recipe.householdId,
+      userId: req.user.id,
+      action: 'rated',
+      entityType: 'recipe',
+      entityId: id,
+      metadata: { title: recipe.title, rating }
+    });
+
+    return success(res, {
+      rating: {
+        id: recipeRating.id,
+        rating: recipeRating.rating,
+        note: recipeRating.note,
+        user: recipeRating.user,
+        createdAt: recipeRating.createdAt,
+        updatedAt: recipeRating.updatedAt
+      }
+    });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * GET /api/recipes/:id/ratings
+ * Get all ratings for a recipe
+ */
+router.get('/:id/ratings', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const recipe = await prisma.recipe.findUnique({
+      where: { id }
+    });
+
+    if (!recipe) {
+      return notFound(res, 'Recipe not found');
+    }
+
+    if (!isMember(req.user, recipe.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const ratings = await prisma.recipeRating.findMany({
+      where: { recipeId: id },
+      include: {
+        user: {
+          select: { id: true, name: true, avatarUrl: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const averageRating = ratings.length > 0
+      ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
+      : null;
+
+    return success(res, {
+      ratings: ratings.map(r => ({
+        id: r.id,
+        rating: r.rating,
+        note: r.note,
+        user: r.user,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt
+      })),
+      averageRating,
+      totalRatings: ratings.length
+    });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/recipes/:id/favorite
+ * Toggle favorite status for a recipe
+ */
+router.post('/:id/favorite', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const recipe = await prisma.recipe.findUnique({
+      where: { id }
+    });
+
+    if (!recipe) {
+      return notFound(res, 'Recipe not found');
+    }
+
+    if (!isMember(req.user, recipe.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    // Check if favorite already exists
+    const existing = await prisma.recipeFavorite.findUnique({
+      where: {
+        recipeId_userId: {
+          recipeId: id,
+          userId: req.user.id
+        }
+      }
+    });
+
+    if (existing) {
+      // Remove favorite
+      await prisma.recipeFavorite.delete({
+        where: { id: existing.id }
+      });
+
+      await logActivity({
+        householdId: recipe.householdId,
+        userId: req.user.id,
+        action: 'favorited',
+        entityType: 'recipe',
+        entityId: id,
+        metadata: { title: recipe.title, favorited: false }
+      });
+
+      return success(res, { isFavorite: false });
+    } else {
+      // Add favorite
+      await prisma.recipeFavorite.create({
+        data: {
+          recipeId: id,
+          userId: req.user.id
+        }
+      });
+
+      await logActivity({
+        householdId: recipe.householdId,
+        userId: req.user.id,
+        action: 'favorited',
+        entityType: 'recipe',
+        entityId: id,
+        metadata: { title: recipe.title, favorited: true }
+      });
+
+      return success(res, { isFavorite: true });
+    }
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
  * DELETE /api/recipes/:id
  * Delete a recipe
  */
@@ -446,6 +820,15 @@ router.delete('/:id', async (req, res) => {
 
     await prisma.recipe.delete({
       where: { id }
+    });
+
+    await logActivity({
+      householdId: recipe.householdId,
+      userId: req.user.id,
+      action: 'deleted',
+      entityType: 'recipe',
+      entityId: id,
+      metadata: { title: recipe.title }
     });
 
     return noContent(res);

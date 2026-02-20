@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../lib/prisma');
 const { success, created, error, forbidden, notFound, serverError, noContent } = require('../lib/response');
 const { authenticate } = require('../middleware/auth');
+const { logActivity } = require('../services/activityLogger');
 
 // All routes require authentication
 router.use(authenticate);
@@ -224,6 +225,210 @@ router.get('/timeline', async (req, res) => {
   }
 });
 
+// ==================== AVAILABILITY & DATE NIGHT ====================
+
+/**
+ * GET /api/calendar/availability
+ * Find free time slots for household members in a date range
+ * Query: householdId, from, to (required)
+ */
+router.get('/availability', async (req, res) => {
+  try {
+    const { householdId, from, to } = req.query;
+
+    if (!householdId || !from || !to) {
+      return error(res, 'householdId, from, and to dates are required');
+    }
+
+    if (!isMember(req.user, householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+
+    // Get all events in range
+    const events = await prisma.calendarEvent.findMany({
+      where: {
+        householdId,
+        OR: [
+          { recurrence: 'none', startDate: { gte: fromDate, lte: toDate } },
+          {
+            recurrence: { not: 'none' },
+            startDate: { lte: toDate },
+            OR: [{ recurrenceEndDate: null }, { recurrenceEndDate: { gte: fromDate } }]
+          }
+        ]
+      },
+      include: {
+        createdBy: { select: { id: true, name: true } }
+      }
+    });
+
+    const expandedEvents = expandRecurringEvents(events, from, to);
+
+    // Get members with their colors
+    const members = await prisma.householdMember.findMany({
+      where: { householdId },
+      include: { user: { select: { id: true, name: true } } }
+    });
+
+    // Build day-by-day availability
+    const availability = [];
+    const current = new Date(fromDate);
+    current.setHours(0, 0, 0, 0);
+
+    while (current <= toDate) {
+      const dayStr = current.toISOString().split('T')[0];
+      const dayEvents = expandedEvents.filter(e => {
+        const eDate = e.occurrenceDate
+          ? new Date(e.occurrenceDate).toISOString().split('T')[0]
+          : new Date(e.startDate).toISOString().split('T')[0];
+        return eDate === dayStr;
+      });
+
+      availability.push({
+        date: dayStr,
+        events: dayEvents.map(e => ({
+          id: e.id,
+          title: e.title,
+          startDate: e.startDate,
+          endDate: e.endDate,
+          allDay: e.allDay,
+          createdById: e.createdById
+        })),
+        isFree: dayEvents.length === 0
+      });
+
+      current.setDate(current.getDate() + 1);
+    }
+
+    return success(res, {
+      members: members.map(m => ({
+        userId: m.userId,
+        name: m.user.name,
+        colorHex: m.colorHex
+      })),
+      availability
+    });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/calendar/date-night
+ * Find the next mutually free evening and create a placeholder event
+ * Body: { householdId }
+ */
+router.post('/date-night', async (req, res) => {
+  try {
+    const { householdId } = req.body;
+
+    if (!householdId) {
+      return error(res, 'householdId is required');
+    }
+
+    if (!isMember(req.user, householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    // Look at the next 14 days for a free evening (18:00-23:00)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const twoWeeksOut = new Date(today);
+    twoWeeksOut.setDate(twoWeeksOut.getDate() + 14);
+
+    const events = await prisma.calendarEvent.findMany({
+      where: {
+        householdId,
+        OR: [
+          { recurrence: 'none', startDate: { gte: today, lte: twoWeeksOut } },
+          {
+            recurrence: { not: 'none' },
+            startDate: { lte: twoWeeksOut },
+            OR: [{ recurrenceEndDate: null }, { recurrenceEndDate: { gte: today } }]
+          }
+        ]
+      }
+    });
+
+    const expandedEvents = expandRecurringEvents(events, today.toISOString(), twoWeeksOut.toISOString());
+
+    // Find first evening (Fri/Sat preferred, then any day) with no events after 18:00
+    const candidates = [];
+    const current = new Date(today);
+    current.setDate(current.getDate() + 1); // Start from tomorrow
+
+    while (current <= twoWeeksOut) {
+      const dayStr = current.toISOString().split('T')[0];
+      const eveningEvents = expandedEvents.filter(e => {
+        const eDate = e.occurrenceDate
+          ? new Date(e.occurrenceDate).toISOString().split('T')[0]
+          : new Date(e.startDate).toISOString().split('T')[0];
+        if (eDate !== dayStr) return false;
+        // Check if event is in evening (after 18:00)
+        const eventHour = new Date(e.startDate).getHours();
+        return e.allDay || eventHour >= 18;
+      });
+
+      if (eveningEvents.length === 0) {
+        const dayOfWeek = current.getDay();
+        const isWeekend = dayOfWeek === 5 || dayOfWeek === 6; // Fri or Sat
+        candidates.push({ date: new Date(current), isWeekend });
+      }
+
+      current.setDate(current.getDate() + 1);
+    }
+
+    // Prefer weekend evenings
+    candidates.sort((a, b) => {
+      if (a.isWeekend && !b.isWeekend) return -1;
+      if (!a.isWeekend && b.isWeekend) return 1;
+      return a.date - b.date;
+    });
+
+    if (candidates.length === 0) {
+      return success(res, { event: null, message: 'No free evenings found in the next 2 weeks' });
+    }
+
+    const chosenDate = candidates[0].date;
+    chosenDate.setHours(20, 0, 0, 0); // 8 PM
+
+    const endDate = new Date(chosenDate);
+    endDate.setHours(23, 0, 0, 0); // 11 PM
+
+    const event = await prisma.calendarEvent.create({
+      data: {
+        householdId,
+        title: 'Date Night',
+        description: 'Auto-planned date night',
+        startDate: chosenDate,
+        endDate,
+        allDay: false,
+        recurrence: 'none',
+        createdById: req.user.id
+      },
+      include: {
+        createdBy: { select: { id: true, name: true } }
+      }
+    });
+
+    logActivity({
+      householdId,
+      userId: req.user.id,
+      action: 'created',
+      entityType: 'calendar',
+      entityId: event.id,
+      metadata: { title: 'Date Night', date: chosenDate.toISOString() }
+    });
+
+    return created(res, { event });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
 // ==================== EVENTS ====================
 
 /**
@@ -357,6 +562,7 @@ router.post('/', async (req, res) => {
       allDay = false,
       recurrence = 'none',
       recurrenceEndDate,
+      colorHex,
       linkedBoardId,
       linkedRecipeId,
       linkedMenuPlanId
@@ -408,6 +614,7 @@ router.post('/', async (req, res) => {
         allDay,
         recurrence,
         recurrenceEndDate: recurrenceEndDate ? new Date(recurrenceEndDate) : null,
+        colorHex: colorHex || null,
         linkedBoardId,
         linkedRecipeId,
         linkedMenuPlanId,
@@ -508,6 +715,10 @@ router.patch('/:id', async (req, res) => {
     if (linkedBoardId !== undefined) updateData.linkedBoardId = linkedBoardId;
     if (linkedRecipeId !== undefined) updateData.linkedRecipeId = linkedRecipeId;
     if (linkedMenuPlanId !== undefined) updateData.linkedMenuPlanId = linkedMenuPlanId;
+
+    // Handle colorHex from req.body
+    const { colorHex: updateColorHex } = req.body;
+    if (updateColorHex !== undefined) updateData.colorHex = updateColorHex;
 
     const updated = await prisma.calendarEvent.update({
       where: { id },

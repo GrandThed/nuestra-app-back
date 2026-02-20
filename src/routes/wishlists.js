@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../lib/prisma');
 const { success, created, error, forbidden, notFound, serverError, noContent } = require('../lib/response');
 const { authenticate } = require('../middleware/auth');
+const { logActivity } = require('../services/activityLogger');
 
 // All routes require authentication
 router.use(authenticate);
@@ -185,10 +186,22 @@ router.get('/', async (req, res) => {
       return forbidden(res, 'You are not a member of this household');
     }
 
-    const where = { householdId };
+    const where = {
+      householdId,
+      archivedAt: null, // Only show non-archived items
+      // Hide secret items from the user they're hidden from
+      NOT: {
+        AND: [
+          { isSecret: true },
+          { hiddenFromUserId: req.user.id }
+        ]
+      }
+    };
     if (categoryId) where.categoryId = categoryId;
     if (ownerType) where.ownerType = ownerType;
     if (checked !== undefined) where.checked = checked === 'true';
+
+    const { sortBy } = req.query;
 
     const items = await prisma.wishlistItem.findMany({
       where,
@@ -201,12 +214,33 @@ router.get('/', async (req, res) => {
         },
         sourceRecipe: {
           select: { id: true, title: true }
+        },
+        votes: {
+          select: { id: true, userId: true, priority: true }
         }
       },
       orderBy: [{ checked: 'asc' }, { createdAt: 'desc' }]
     });
 
-    return success(res, { items });
+    // Calculate average priority from votes
+    let result = items.map(item => {
+      const avgPriority = item.votes.length > 0
+        ? item.votes.reduce((sum, v) => sum + v.priority, 0) / item.votes.length
+        : 0;
+      return {
+        ...item,
+        averagePriority: Math.round(avgPriority * 10) / 10,
+        voteCount: item.votes.length,
+        myVote: item.votes.find(v => v.userId === req.user.id) || null
+      };
+    });
+
+    // Sort by votes if requested
+    if (sortBy === 'votes') {
+      result.sort((a, b) => b.averagePriority - a.averagePriority);
+    }
+
+    return success(res, { items: result });
   } catch (err) {
     return serverError(res, err);
   }
@@ -229,7 +263,9 @@ router.post('/', async (req, res) => {
       preferenceEmoji,
       quantity,
       unit,
-      sourceRecipeId
+      sourceRecipeId,
+      isSecret = false,
+      hiddenFromUserId
     } = req.body;
 
     if (!householdId || !categoryId || !name) {
@@ -261,13 +297,24 @@ router.post('/', async (req, res) => {
         preferenceEmoji,
         quantity,
         unit,
-        sourceRecipeId
+        sourceRecipeId,
+        isSecret,
+        hiddenFromUserId: isSecret ? hiddenFromUserId : null
       },
       include: {
         category: {
           select: { id: true, name: true }
         }
       }
+    });
+
+    logActivity({
+      householdId,
+      userId: req.user.id,
+      action: 'created',
+      entityType: 'wishlist',
+      entityId: item.id,
+      metadata: { name: item.name, categoryName: item.category?.name }
     });
 
     return created(res, { item });
@@ -452,5 +499,217 @@ const getOrCreateCategory = async (householdId, name, type = 'system') => {
 
 // Export helper for use in menus route
 router.getOrCreateCategory = getOrCreateCategory;
+
+// ==================== VOTING ====================
+
+/**
+ * POST /api/wishlists/:id/vote
+ * Set priority vote for an item (upsert)
+ * Body: { priority: 1-5 }
+ */
+router.post('/:id/vote', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { priority } = req.body;
+
+    if (!priority || priority < 1 || priority > 5) {
+      return error(res, 'priority must be between 1 and 5');
+    }
+
+    const item = await prisma.wishlistItem.findUnique({
+      where: { id }
+    });
+
+    if (!item) {
+      return notFound(res, 'Item not found');
+    }
+
+    if (!isMember(req.user, item.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const vote = await prisma.wishlistVote.upsert({
+      where: {
+        wishlistItemId_userId: {
+          wishlistItemId: id,
+          userId: req.user.id
+        }
+      },
+      update: { priority },
+      create: {
+        wishlistItemId: id,
+        userId: req.user.id,
+        priority
+      }
+    });
+
+    logActivity({
+      householdId: item.householdId,
+      userId: req.user.id,
+      action: 'voted',
+      entityType: 'wishlist',
+      entityId: id,
+      metadata: { name: item.name, priority }
+    });
+
+    return success(res, { vote });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+// ==================== PURCHASE HISTORY ====================
+
+/**
+ * GET /api/wishlists/history
+ * Get purchase history (archived items)
+ */
+router.get('/history', async (req, res) => {
+  try {
+    const { householdId, limit = '50', offset = '0' } = req.query;
+
+    if (!householdId) {
+      return error(res, 'householdId is required');
+    }
+
+    if (!isMember(req.user, householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const take = Math.min(parseInt(limit) || 50, 100);
+    const skip = parseInt(offset) || 0;
+
+    const [history, total] = await Promise.all([
+      prisma.wishlistPurchaseHistory.findMany({
+        where: { householdId },
+        include: {
+          purchasedBy: {
+            select: { id: true, name: true, avatarUrl: true }
+          }
+        },
+        orderBy: { purchasedAt: 'desc' },
+        take,
+        skip
+      }),
+      prisma.wishlistPurchaseHistory.count({ where: { householdId } })
+    ]);
+
+    return success(res, { history, total, limit: take, offset: skip });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/wishlists/:id/purchase
+ * Mark item as purchased: archive it + optionally create expense
+ * Body: { createExpense?: boolean, categoryId?: string, paidById?: string }
+ */
+router.post('/:id/purchase', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { createExpense = false, categoryId, paidById } = req.body;
+
+    const item = await prisma.wishlistItem.findUnique({
+      where: { id }
+    });
+
+    if (!item) {
+      return notFound(res, 'Item not found');
+    }
+
+    if (!isMember(req.user, item.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    // Archive the item
+    await prisma.wishlistItem.update({
+      where: { id },
+      data: {
+        checked: true,
+        archivedAt: new Date()
+      }
+    });
+
+    // Create purchase history entry
+    const historyEntry = await prisma.wishlistPurchaseHistory.create({
+      data: {
+        householdId: item.householdId,
+        name: item.name,
+        price: item.price,
+        purchasedById: req.user.id,
+        originalItemId: item.id
+      }
+    });
+
+    let expense = null;
+
+    // Optionally create an expense
+    if (createExpense && item.price) {
+      // Import calculateSplits logic inline
+      const members = await prisma.householdMember.findMany({
+        where: { householdId: item.householdId }
+      });
+
+      const membersWithIncome = members.filter(m => m.income && parseFloat(m.income) > 0);
+      let splits;
+
+      if (membersWithIncome.length === 0) {
+        const equalShare = parseFloat(item.price) / members.length;
+        splits = members.map(m => ({ userId: m.userId, amount: equalShare }));
+      } else {
+        const totalIncome = membersWithIncome.reduce((sum, m) => sum + parseFloat(m.income), 0);
+        splits = members.map(m => {
+          const memberIncome = m.income ? parseFloat(m.income) : 0;
+          const proportion = totalIncome > 0 ? memberIncome / totalIncome : 0;
+          return { userId: m.userId, amount: parseFloat(item.price) * proportion };
+        });
+      }
+
+      expense = await prisma.expense.create({
+        data: {
+          householdId: item.householdId,
+          description: item.name,
+          amount: item.price,
+          currency: 'ARS',
+          date: new Date(),
+          categoryId: categoryId || null,
+          paidById: paidById || req.user.id,
+          linkedWishlistItemId: item.id,
+          splits: {
+            create: splits.map(s => ({
+              userId: s.userId,
+              amount: s.amount,
+              settled: false
+            }))
+          }
+        }
+      });
+
+      // Update history entry with expense link
+      await prisma.wishlistPurchaseHistory.update({
+        where: { id: historyEntry.id },
+        data: { linkedExpenseId: expense.id }
+      });
+    }
+
+    logActivity({
+      householdId: item.householdId,
+      userId: req.user.id,
+      action: 'archived',
+      entityType: 'wishlist',
+      entityId: id,
+      metadata: { name: item.name, price: item.price ? parseFloat(item.price) : null, expenseCreated: !!expense }
+    });
+
+    return success(res, {
+      archived: true,
+      historyEntry,
+      expense: expense ? { id: expense.id } : null
+    });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
 
 module.exports = router;

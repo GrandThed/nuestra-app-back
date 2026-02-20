@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../lib/prisma');
 const { success, created, error, forbidden, notFound, serverError, noContent } = require('../lib/response');
 const { authenticate } = require('../middleware/auth');
+const { logActivity } = require('../services/activityLogger');
 
 // All routes require authentication
 router.use(authenticate);
@@ -96,6 +97,68 @@ router.post('/', async (req, res) => {
         createdAt: menuPlan.createdAt
       }
     });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * GET /api/menus/history
+ * Get meal history - frequency of recipes used
+ * NOTE: This route MUST be defined before /:id routes
+ */
+router.get('/history', async (req, res) => {
+  try {
+    const { householdId } = req.query;
+
+    if (!householdId) {
+      return error(res, 'householdId is required');
+    }
+
+    if (!isMember(req.user, householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    // Get all menu items grouped by recipe
+    const menuItems = await prisma.menuItem.findMany({
+      where: {
+        menuPlan: { householdId }
+      },
+      include: {
+        recipe: {
+          select: { id: true, title: true, imageUrl: true }
+        }
+      },
+      orderBy: { date: 'desc' }
+    });
+
+    // Aggregate by recipe
+    const recipeHistory = {};
+    for (const item of menuItems) {
+      const recipeId = item.recipeId;
+      if (!recipeHistory[recipeId]) {
+        recipeHistory[recipeId] = {
+          recipe: item.recipe,
+          count: 0,
+          lastCooked: item.date,
+          dates: []
+        };
+      }
+      recipeHistory[recipeId].count++;
+      recipeHistory[recipeId].dates.push(item.date);
+    }
+
+    // Convert to sorted array (most frequent first)
+    const history = Object.values(recipeHistory)
+      .sort((a, b) => b.count - a.count)
+      .map(h => ({
+        recipe: h.recipe,
+        timesCooked: h.count,
+        lastCooked: h.lastCooked,
+        daysSinceLastCooked: Math.floor((Date.now() - new Date(h.lastCooked).getTime()) / (1000 * 60 * 60 * 24))
+      }));
+
+    return success(res, { history });
   } catch (err) {
     return serverError(res, err);
   }
@@ -609,6 +672,86 @@ router.post('/:id/generate-shopping', async (req, res) => {
       },
       itemsCreated: shoppingList.length,
       shoppingList
+    });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/menus/:id/items/:itemId/leftover
+ * Create a leftover entry for the next day based on an existing meal
+ */
+router.post('/:id/items/:itemId/leftover', async (req, res) => {
+  try {
+    const { id, itemId } = req.params;
+    const { date, mealType } = req.body;
+
+    const menuPlan = await prisma.menuPlan.findUnique({
+      where: { id }
+    });
+
+    if (!menuPlan) {
+      return notFound(res, 'Menu plan not found');
+    }
+
+    if (!isMember(req.user, menuPlan.householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const originalItem = await prisma.menuItem.findUnique({
+      where: { id: itemId },
+      include: {
+        recipe: { select: { id: true, title: true } }
+      }
+    });
+
+    if (!originalItem || originalItem.menuPlanId !== id) {
+      return notFound(res, 'Menu item not found');
+    }
+
+    // Default: next day, same meal type
+    const leftoverDate = date
+      ? new Date(date)
+      : new Date(new Date(originalItem.date).getTime() + 24 * 60 * 60 * 1000);
+
+    const leftover = await prisma.menuItem.create({
+      data: {
+        menuPlanId: id,
+        recipeId: originalItem.recipeId,
+        date: leftoverDate,
+        mealType: mealType || originalItem.mealType,
+        isLeftover: true,
+        originalMenuItemId: originalItem.id,
+        substitutions: originalItem.substitutions
+      },
+      include: {
+        recipe: {
+          select: { id: true, title: true, imageUrl: true, servings: true, ingredients: true }
+        }
+      }
+    });
+
+    logActivity({
+      householdId: menuPlan.householdId,
+      userId: req.user.id,
+      action: 'created',
+      entityType: 'menu_item',
+      entityId: leftover.id,
+      metadata: { title: originalItem.recipe.title, isLeftover: true }
+    });
+
+    return created(res, {
+      item: {
+        id: leftover.id,
+        date: leftover.date,
+        mealType: leftover.mealType,
+        isLeftover: leftover.isLeftover,
+        originalMenuItemId: leftover.originalMenuItemId,
+        substitutions: leftover.substitutions,
+        recipe: leftover.recipe,
+        createdAt: leftover.createdAt
+      }
     });
   } catch (err) {
     return serverError(res, err);

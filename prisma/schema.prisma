@@ -43,6 +43,7 @@ model Household {
   id         String   @id @default(uuid())
   name       String
   hemisphere String   @default("north") // north, south - affects seasonal calculations
+  splitMode  String   @default("equal") // equal, proportional - expense split method
   createdAt  DateTime @default(now())
 
   members            HouseholdMember[]

@@ -16,10 +16,16 @@ const isMember = (user, householdId) => {
 };
 
 /**
- * Calculate expense splits based on household members' income
- * If no income data, splits equally
+ * Calculate expense splits based on household splitMode setting
+ * If splitMode is "proportional" and members have income, splits by income ratio
+ * Otherwise splits equally
  */
 const calculateSplits = async (householdId, amount) => {
+  const household = await prisma.household.findUnique({
+    where: { id: householdId },
+    select: { splitMode: true }
+  });
+
   const members = await prisma.householdMember.findMany({
     where: { householdId },
     include: {
@@ -33,12 +39,21 @@ const calculateSplits = async (householdId, amount) => {
     return [];
   }
 
-  // Check if any member has income set
+  const equalShare = parseFloat(amount) / members.length;
+
+  // If splitMode is "equal" or not set, always split equally
+  if (!household || household.splitMode !== 'proportional') {
+    return members.map(m => ({
+      userId: m.userId,
+      amount: equalShare
+    }));
+  }
+
+  // Proportional mode: check if any member has income set
   const membersWithIncome = members.filter(m => m.income && parseFloat(m.income) > 0);
 
   if (membersWithIncome.length === 0) {
-    // Equal split if no income data
-    const equalShare = parseFloat(amount) / members.length;
+    // Fall back to equal split if no income data
     return members.map(m => ({
       userId: m.userId,
       amount: equalShare
@@ -50,7 +65,6 @@ const calculateSplits = async (householdId, amount) => {
 
   return members.map(m => {
     const memberIncome = m.income ? parseFloat(m.income) : 0;
-    // If member has no income, they don't contribute
     const proportion = totalIncome > 0 ? memberIncome / totalIncome : 0;
     return {
       userId: m.userId,
@@ -408,6 +422,81 @@ router.post('/settle-period', async (req, res) => {
       settledCount: result.count,
       expensesAffected: expenseIds.length,
       period: { from: fromDate, to: toDate }
+    });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/expenses/recalculate-splits
+ * Recalculate expense splits based on current household member income
+ * Skips expenses with custom splits
+ */
+router.post('/recalculate-splits', async (req, res) => {
+  try {
+    const { householdId, month, year } = req.body;
+
+    if (!householdId) {
+      return error(res, 'householdId is required');
+    }
+
+    if (!isMember(req.user, householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const where = { householdId };
+
+    // Optional date filtering
+    if (month && year) {
+      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
+      where.date = { gte: startDate, lte: endDate };
+    } else if (year) {
+      const startDate = new Date(parseInt(year), 0, 1);
+      const endDate = new Date(parseInt(year), 11, 31, 23, 59, 59, 999);
+      where.date = { gte: startDate, lte: endDate };
+    }
+
+    // Get all expenses with their splits
+    const expenses = await prisma.expense.findMany({
+      where,
+      include: {
+        splits: { select: { isCustom: true } }
+      }
+    });
+
+    // Filter out expenses with custom splits
+    const toRecalculate = expenses.filter(
+      e => !e.splits.some(s => s.isCustom)
+    );
+
+    let updatedCount = 0;
+
+    for (const expense of toRecalculate) {
+      const newSplits = await calculateSplits(householdId, expense.amount);
+
+      // Delete old splits and create new ones
+      await prisma.expenseSplit.deleteMany({
+        where: { expenseId: expense.id }
+      });
+
+      await prisma.expenseSplit.createMany({
+        data: newSplits.map(s => ({
+          expenseId: expense.id,
+          userId: s.userId,
+          amount: s.amount,
+          settled: false
+        }))
+      });
+
+      updatedCount++;
+    }
+
+    return success(res, {
+      updatedCount,
+      skippedCustom: expenses.length - toRecalculate.length,
+      total: expenses.length
     });
   } catch (err) {
     return serverError(res, err);

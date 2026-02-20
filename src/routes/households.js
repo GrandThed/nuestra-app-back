@@ -81,6 +81,7 @@ router.post('/', async (req, res) => {
         id: household.id,
         name: household.name,
         hemisphere: household.hemisphere,
+        splitMode: household.splitMode,
         createdAt: household.createdAt,
         members: household.members.map(m => ({
           id: m.id,
@@ -134,6 +135,7 @@ router.get('/:id', async (req, res) => {
         id: household.id,
         name: household.name,
         hemisphere: household.hemisphere,
+        splitMode: household.splitMode,
         createdAt: household.createdAt,
         members: household.members.map(m => ({
           id: m.id,
@@ -314,6 +316,7 @@ router.post('/join', async (req, res) => {
         id: household.id,
         name: household.name,
         hemisphere: household.hemisphere,
+        splitMode: household.splitMode,
         createdAt: household.createdAt,
         members: household.members.map(m => ({
           id: m.id,
@@ -339,7 +342,7 @@ router.post('/join', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, hemisphere } = req.body;
+    const { name, hemisphere, splitMode } = req.body;
 
     // Check membership (only owners can update household settings)
     if (!isOwner(req.user, id)) {
@@ -362,6 +365,13 @@ router.patch('/:id', async (req, res) => {
         return error(res, 'Invalid hemisphere. Must be "north" or "south"');
       }
       updateData.hemisphere = hemisphere;
+    }
+    if (splitMode !== undefined) {
+      const validModes = ['equal', 'proportional'];
+      if (!validModes.includes(splitMode)) {
+        return error(res, 'Invalid splitMode. Must be "equal" or "proportional"');
+      }
+      updateData.splitMode = splitMode;
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -387,6 +397,7 @@ router.patch('/:id', async (req, res) => {
         id: updated.id,
         name: updated.name,
         hemisphere: updated.hemisphere,
+        splitMode: updated.splitMode,
         createdAt: updated.createdAt,
         members: updated.members.map(m => ({
           id: m.id,

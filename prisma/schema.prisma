@@ -97,12 +97,13 @@ model HouseholdInvite {
 // ==================== BOARDS (Pinterest-style) ====================
 
 model Board {
-  id          String   @id @default(uuid())
-  householdId String
-  name        String
-  coverUrl    String?
-  createdById String
-  createdAt   DateTime @default(now())
+  id                    String   @id @default(uuid())
+  householdId           String
+  name                  String
+  coverUrl              String?
+  compositeThumbnailKey String?
+  createdById           String
+  createdAt             DateTime @default(now())
 
   household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
   items          BoardItem[]

@@ -111,6 +111,94 @@ const isValidDocumentType = (mimeType) => ALLOWED_DOCUMENT_TYPES.includes(mimeTy
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 /**
+ * Download a file from S3 as a Buffer
+ * @param {string} key - The S3 key
+ * @returns {Promise<Buffer>}
+ */
+const downloadFileBuffer = async (key) => {
+  const command = new GetObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: key
+  });
+  const response = await s3Client.send(command);
+  const chunks = [];
+  for await (const chunk of response.Body) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+};
+
+/**
+ * Composite thumbnail configuration
+ */
+const COMPOSITE_CONFIG = {
+  canvasWidth: 200,
+  canvasHeight: 200,
+  cellWidth: 99,
+  cellHeight: 99,
+  gap: 2,
+  quality: 60
+};
+
+/**
+ * Generate a 2x2 composite thumbnail from up to 4 image buffers
+ * @param {Buffer[]} imageBuffers - Array of 1-4 image buffers
+ * @returns {Promise<Buffer>} - Composite image as WebP buffer
+ */
+const generateCompositeThumbnail = async (imageBuffers) => {
+  const { canvasWidth, canvasHeight, cellWidth, cellHeight, gap, quality } = COMPOSITE_CONFIG;
+
+  const positions = [
+    { left: 0, top: 0 },
+    { left: cellWidth + gap, top: 0 },
+    { left: 0, top: cellHeight + gap },
+    { left: cellWidth + gap, top: cellHeight + gap }
+  ];
+
+  const compositeInputs = await Promise.all(
+    imageBuffers.slice(0, 4).map(async (buf, index) => {
+      const resized = await sharp(buf)
+        .resize(cellWidth, cellHeight, { fit: 'cover', position: 'center' })
+        .toBuffer();
+      return {
+        input: resized,
+        left: positions[index].left,
+        top: positions[index].top
+      };
+    })
+  );
+
+  // Fill empty cells with gray placeholder
+  for (let i = imageBuffers.length; i < 4; i++) {
+    const placeholder = await sharp({
+      create: {
+        width: cellWidth,
+        height: cellHeight,
+        channels: 4,
+        background: { r: 220, g: 220, b: 230, alpha: 255 }
+      }
+    }).png().toBuffer();
+    compositeInputs.push({
+      input: placeholder,
+      left: positions[i].left,
+      top: positions[i].top
+    });
+  }
+
+  return await sharp({
+    create: {
+      width: canvasWidth,
+      height: canvasHeight,
+      channels: 4,
+      background: { r: 240, g: 240, b: 245, alpha: 255 }
+    }
+  })
+    .composite(compositeInputs)
+    .webp({ quality })
+    .toBuffer();
+};
+
+/**
  * Thumbnail configuration
  */
 const THUMBNAIL_CONFIG = {
@@ -188,12 +276,15 @@ module.exports = {
   deleteFile,
   deleteFileByUrl,
   getSignedDownloadUrl,
+  downloadFileBuffer,
   isValidImageType,
   isValidDocumentType,
   generateThumbnail,
+  generateCompositeThumbnail,
   uploadImageWithThumbnail,
   ALLOWED_IMAGE_TYPES,
   ALLOWED_DOCUMENT_TYPES,
   MAX_FILE_SIZE,
-  THUMBNAIL_CONFIG
+  THUMBNAIL_CONFIG,
+  COMPOSITE_CONFIG
 };

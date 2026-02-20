@@ -7,6 +7,7 @@ const { uploadImage, handleUploadError } = require('../middleware/upload');
 const { uploadFile, deleteFile, getSignedDownloadUrl, uploadImageWithThumbnail } = require('../services/storage');
 const { fetchLinkPreview } = require('../services/linkPreview');
 const { logActivity } = require('../services/activityLogger');
+const { regenerateBoardComposite } = require('../services/compositeThumbnail');
 
 // All routes require authentication
 router.use(authenticate);
@@ -267,13 +268,19 @@ router.get('/', async (req, res) => {
         })
       );
 
+      // Generate signed URL for composite thumbnail if it exists
+      const compositeThumbnailUrl = b.compositeThumbnailKey
+        ? await getSignedDownloadUrl(b.compositeThumbnailKey, 7 * 24 * 60 * 60)
+        : null;
+
       return {
         id: b.id,
         name: b.name,
         coverUrl: b.coverUrl,
         itemCount: b._count.items,
         createdAt: b.createdAt,
-        previewItems: previewItems.filter(Boolean)
+        previewItems: previewItems.filter(Boolean),
+        compositeThumbnailUrl
       };
     }));
 
@@ -409,6 +416,15 @@ router.delete('/:id', async (req, res) => {
       return forbidden(res, 'You are not a member of this household');
     }
 
+    // Delete composite thumbnail from storage
+    if (board.compositeThumbnailKey) {
+      try {
+        await deleteFile(board.compositeThumbnailKey);
+      } catch (e) {
+        console.error('Failed to delete composite thumbnail:', e);
+      }
+    }
+
     // Delete all photo files from storage
     for (const item of board.items) {
       if (item.type === 'photo' && item.url) {
@@ -477,6 +493,9 @@ router.post('/:id/items/link', async (req, res) => {
       }
     });
 
+    // Regenerate composite thumbnail in background
+    regenerateBoardComposite(id).catch(() => {});
+
     return created(res, {
       item: {
         id: item.id,
@@ -543,6 +562,9 @@ router.post('/:id/items/photo', uploadImage.single('photo'), handleUploadError, 
         }
       }
     });
+
+    // Regenerate composite thumbnail in background
+    regenerateBoardComposite(id).catch(() => {});
 
     return created(res, {
       item: {
@@ -716,6 +738,9 @@ router.delete('/:id/items/:itemId', async (req, res) => {
     await prisma.boardItem.delete({
       where: { id: itemId }
     });
+
+    // Regenerate composite thumbnail in background
+    regenerateBoardComposite(id).catch(() => {});
 
     return noContent(res);
   } catch (err) {
@@ -1061,6 +1086,9 @@ router.patch('/:id/items/reorder', async (req, res) => {
       entityId: id,
       metadata: { action: 'items_reordered', itemCount: items.length }
     });
+
+    // Regenerate composite thumbnail in background
+    regenerateBoardComposite(id).catch(() => {});
 
     return success(res, { message: 'Items reordered successfully' });
   } catch (err) {

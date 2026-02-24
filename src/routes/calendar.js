@@ -565,7 +565,10 @@ router.post('/', async (req, res) => {
       colorHex,
       linkedBoardId,
       linkedRecipeId,
-      linkedMenuPlanId
+      linkedMenuPlanId,
+      isTask = false,
+      recurrenceInterval,
+      recurrenceDays
     } = req.body;
 
     if (!householdId || !title || !startDate) {
@@ -618,7 +621,10 @@ router.post('/', async (req, res) => {
         linkedBoardId,
         linkedRecipeId,
         linkedMenuPlanId,
-        createdById: req.user.id
+        createdById: req.user.id,
+        isTask,
+        recurrenceInterval: recurrenceInterval || null,
+        recurrenceDays: recurrenceDays || null
       },
       include: {
         linkedBoard: {
@@ -659,7 +665,10 @@ router.patch('/:id', async (req, res) => {
       recurrenceEndDate,
       linkedBoardId,
       linkedRecipeId,
-      linkedMenuPlanId
+      linkedMenuPlanId,
+      isTask,
+      recurrenceInterval,
+      recurrenceDays
     } = req.body;
 
     const event = await prisma.calendarEvent.findUnique({
@@ -715,6 +724,10 @@ router.patch('/:id', async (req, res) => {
     if (linkedBoardId !== undefined) updateData.linkedBoardId = linkedBoardId;
     if (linkedRecipeId !== undefined) updateData.linkedRecipeId = linkedRecipeId;
     if (linkedMenuPlanId !== undefined) updateData.linkedMenuPlanId = linkedMenuPlanId;
+
+    if (isTask !== undefined) updateData.isTask = isTask;
+    if (recurrenceInterval !== undefined) updateData.recurrenceInterval = recurrenceInterval || null;
+    if (recurrenceDays !== undefined) updateData.recurrenceDays = recurrenceDays || null;
 
     // Handle colorHex from req.body
     const { colorHex: updateColorHex } = req.body;

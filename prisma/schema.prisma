@@ -31,6 +31,7 @@ model User {
   wishlistVotes      WishlistVote[]
   purchaseHistory    WishlistPurchaseHistory[]
   calendarEvents     CalendarEvent[]
+  taskCompletions    TaskCompletion[]
   activityLogs       ActivityLog[]
   userPreferences    UserPreference[]
   invitesCreated     HouseholdInvite[] @relation("InvitesCreated")
@@ -60,6 +61,7 @@ model Household {
   wishlistItems      WishlistItem[]
   purchaseHistory    WishlistPurchaseHistory[]
   calendarEvents     CalendarEvent[]
+  taskCompletions    TaskCompletion[]
   activityLogs       ActivityLog[]
 }
 
@@ -431,12 +433,31 @@ model CalendarEvent {
   linkedMenuPlanId String?
   createdById      String
   createdAt        DateTime  @default(now())
+  isTask           Boolean   @default(false)
+  recurrenceInterval Int?    // for "every N days" task recurrence
+  recurrenceDays   String?   // comma-separated weekday codes: "mon,wed,fri"
 
   household      Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   linkedBoard    Board?    @relation(fields: [linkedBoardId], references: [id])
   linkedRecipe   Recipe?   @relation(fields: [linkedRecipeId], references: [id])
   linkedMenuPlan MenuPlan? @relation(fields: [linkedMenuPlanId], references: [id])
   createdBy      User      @relation(fields: [createdById], references: [id])
+  taskCompletions TaskCompletion[]
+}
+
+model TaskCompletion {
+  id             String   @id @default(uuid())
+  eventId        String
+  occurrenceDate DateTime
+  completedById  String
+  householdId    String
+  completedAt    DateTime @default(now())
+
+  event       CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  completedBy User          @relation(fields: [completedById], references: [id])
+  household   Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, occurrenceDate])
 }
 
 // ==================== ACTIVITY & PREFERENCES ====================

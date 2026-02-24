@@ -34,6 +34,7 @@ model User {
   taskCompletions    TaskCompletion[]
   activityLogs       ActivityLog[]
   userPreferences    UserPreference[]
+  chatMessages       ChatMessage[]
   invitesCreated     HouseholdInvite[] @relation("InvitesCreated")
   invitesUsed        HouseholdInvite[] @relation("InvitesUsed")
 
@@ -63,6 +64,7 @@ model Household {
   calendarEvents     CalendarEvent[]
   taskCompletions    TaskCompletion[]
   activityLogs       ActivityLog[]
+  chatMessages       ChatMessage[]
 }
 
 model HouseholdMember {
@@ -458,6 +460,26 @@ model TaskCompletion {
   household   Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, occurrenceDate])
+}
+
+// ==================== CHAT ====================
+
+model ChatMessage {
+  id          String   @id @default(uuid())
+  householdId String
+  userId      String?
+  role        String   // "user" | "assistant" | "system"
+  content     String
+  imageUrls   String[] @default([])
+  toolCalls   Json?    // [{tool, params}] for action tools in final response
+  suggestions String[] @default([]) // LLM-suggested follow-up prompts
+  metadata    Json?    // For storing data_request/response type info
+  createdAt   DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([householdId, createdAt])
 }
 
 // ==================== ACTIVITY & PREFERENCES ====================

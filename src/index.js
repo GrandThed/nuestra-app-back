@@ -456,7 +456,7 @@ app.get('/api', (req, res) => {
   res.json({
     name: 'Household Hub API',
     version: '1.0.0',
-    modules: ['boards', 'recipes', 'menus', 'expenses', 'wishlist', 'calendar', 'tasks', 'activity', 'preferences']
+    modules: ['boards', 'recipes', 'menus', 'expenses', 'wishlist', 'calendar', 'tasks', 'activity', 'preferences', 'chat']
   });
 });
 
@@ -473,6 +473,7 @@ app.use('/api/calendar', require('./routes/calendar'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/activity', require('./routes/activity'));
 app.use('/api/users/preferences', require('./routes/preferences'));
+app.use('/api/chat', require('./routes/chat'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {

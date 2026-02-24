@@ -544,7 +544,7 @@ router.delete('/:id/items/:itemId', async (req, res) => {
 router.post('/:id/generate-shopping', async (req, res) => {
   try {
     const { id } = req.params;
-    const { servingsMultiplier = 1 } = req.body;
+    const { servingsMultiplier = 1, dates: filterDates } = req.body;
 
     const menuPlan = await prisma.menuPlan.findUnique({
       where: { id },
@@ -573,10 +573,24 @@ router.post('/:id/generate-shopping', async (req, res) => {
       return forbidden(res, 'You are not a member of this household');
     }
 
+    // Filter items by dates if provided
+    let itemsToProcess = menuPlan.items;
+    if (Array.isArray(filterDates) && filterDates.length > 0) {
+      const dateSet = new Set(filterDates.map(d => {
+        const date = new Date(d);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      }));
+      itemsToProcess = menuPlan.items.filter(item => {
+        const itemDate = new Date(item.date);
+        const key = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, '0')}-${String(itemDate.getDate()).padStart(2, '0')}`;
+        return dateSet.has(key);
+      });
+    }
+
     // Aggregate ingredients from all recipes (with substitutions applied)
     const ingredientMap = new Map();
 
-    for (const item of menuPlan.items) {
+    for (const item of itemsToProcess) {
       const recipe = item.recipe;
       if (!recipe || !Array.isArray(recipe.ingredients)) continue;
 
@@ -615,8 +629,20 @@ router.post('/:id/generate-shopping', async (req, res) => {
       a.name.localeCompare(b.name)
     );
 
-    // Get date range from items
-    const dates = menuPlan.items.map(i => i.date).sort((a, b) => a - b);
+    // Get date range from processed items
+    const dates = itemsToProcess.map(i => i.date).sort((a, b) => a - b);
+
+    // Build category description with date range
+    let categoryDescription = null;
+    if (dates.length > 0) {
+      const formatDate = (d) => {
+        const date = new Date(d);
+        return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+      };
+      const fromStr = formatDate(dates[0]);
+      const toStr = formatDate(dates[dates.length - 1]);
+      categoryDescription = fromStr === toStr ? fromStr : `${fromStr} al ${toStr}`;
+    }
 
     // Create or get "Supermarket" category
     const categoryName = menuPlan.name
@@ -637,9 +663,16 @@ router.post('/:id/generate-shopping', async (req, res) => {
         data: {
           householdId: menuPlan.householdId,
           name: categoryName,
+          description: categoryDescription,
           type: 'system',
           sortOrder: -1 // System categories sort first
         }
+      });
+    } else {
+      // Update description with new date range
+      category = await prisma.wishlistCategory.update({
+        where: { id: category.id },
+        data: { description: categoryDescription }
       });
     }
 
@@ -668,7 +701,8 @@ router.post('/:id/generate-shopping', async (req, res) => {
       servingsMultiplier,
       wishlistCategory: {
         id: category.id,
-        name: category.name
+        name: category.name,
+        description: category.description
       },
       itemsCreated: shoppingList.length,
       shoppingList

@@ -352,11 +352,12 @@ model ExpenseBudget {
 // ==================== WISHLISTS ====================
 
 model WishlistCategory {
-  id          String @id @default(uuid())
+  id          String  @id @default(uuid())
   householdId String
-  name        String // buy now, buy when we can, gift ideas
-  type        String @default("custom") // system, custom
-  sortOrder   Int    @default(0)
+  name        String  // buy now, buy when we can, gift ideas
+  description String? // optional subtitle (e.g. date range for shopping lists)
+  type        String  @default("custom") // system, custom
+  sortOrder   Int     @default(0)
 
   household Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
   items     WishlistItem[]

@@ -47,6 +47,7 @@ router.get('/categories', async (req, res) => {
       categories: categories.map(cat => ({
         id: cat.id,
         name: cat.name,
+        description: cat.description,
         type: cat.type,
         sortOrder: cat.sortOrder,
         itemCount: cat._count.items

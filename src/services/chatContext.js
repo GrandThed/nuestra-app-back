@@ -68,12 +68,13 @@ const buildChatContext = async (householdId) => {
 
   return {
     members: household.members.map((m) => ({
+      id: m.user.id,
       name: m.user.name,
       role: m.role,
     })),
-    boards: boards.map((b) => b.name),
-    wishlistCategories: wishlistCategories.map((c) => c.name),
-    expenseCategories: expenseCategories.map((c) => c.name),
+    boards: boards.map((b) => ({ id: b.id, name: b.name })),
+    wishlistCategories: wishlistCategories.map((c) => ({ id: c.id, name: c.name })),
+    expenseCategories: expenseCategories.map((c) => ({ id: c.id, name: c.name })),
     today: new Date().toISOString().split('T')[0],
     hemisphere: household.hemisphere || 'south',
     season: calculateSeason(household.hemisphere || 'south'),

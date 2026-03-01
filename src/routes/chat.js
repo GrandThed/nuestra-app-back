@@ -3,14 +3,13 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const prisma = require('../lib/prisma');
 const { success, error, forbidden, serverError } = require('../lib/response');
-const { sendChatMessage, continueChatWithData } = require('../services/n8n');
+const { runChatLoop } = require('../services/claude');
 const { buildChatContext } = require('../services/chatContext');
 
 // All chat routes require authentication
 router.use(authenticate);
 
-const HISTORY_LIMIT = 20; // Messages sent to n8n as conversation context
-const MAX_CONTINUE_ROUNDS = 2; // Max data_request rounds per message
+const HISTORY_LIMIT = 30; // Messages sent to Claude as conversation context
 
 /**
  * Check if user is a member of any household
@@ -84,57 +83,34 @@ router.post('/', async (req, res) => {
       getConversationHistory(householdId),
     ]);
 
-    // Call n8n
-    const n8nResponse = await sendChatMessage({
+    // Call Claude (handles query tool loop internally)
+    const claudeResponse = await runChatLoop({
       message: message.trim(),
       imageUrls: imageUrls || [],
       history,
       context,
+      householdId,
     });
 
-    // Handle data_request (LLM needs more data)
-    if (n8nResponse.type === 'data_request') {
-      // Store the data request as a system message
-      const systemMsg = await prisma.chatMessage.create({
-        data: {
-          householdId,
-          role: 'system',
-          content: n8nResponse.message || 'Recopilando información...',
-          metadata: {
-            type: 'data_request',
-            requests: n8nResponse.requests || [],
-            round: 1,
-          },
-        },
-      });
-
-      return success(res, {
-        type: 'data_request',
-        messageId: systemMsg.id,
-        message: n8nResponse.message || 'Recopilando información...',
-        requests: n8nResponse.requests || [],
-      });
-    }
-
-    // Handle final response
+    // Store and return the response
     const assistantMsg = await prisma.chatMessage.create({
       data: {
         householdId,
         role: 'assistant',
-        content: n8nResponse.reply || '',
-        toolCalls: n8nResponse.toolCalls && n8nResponse.toolCalls.length > 0
-          ? n8nResponse.toolCalls
+        content: claudeResponse.reply || '',
+        toolCalls: claudeResponse.toolCalls && claudeResponse.toolCalls.length > 0
+          ? claudeResponse.toolCalls
           : undefined,
-        suggestions: n8nResponse.suggestions || [],
+        suggestions: claudeResponse.suggestions || [],
       },
     });
 
     return success(res, {
       type: 'response',
       messageId: assistantMsg.id,
-      reply: n8nResponse.reply || '',
-      toolCalls: n8nResponse.toolCalls || [],
-      suggestions: n8nResponse.suggestions || [],
+      reply: claudeResponse.reply || '',
+      toolCalls: claudeResponse.toolCalls || [],
+      suggestions: claudeResponse.suggestions || [],
     });
   } catch (err) {
     if (err.name === 'TimeoutError' || err.message?.includes('timeout')) {
@@ -145,93 +121,16 @@ router.post('/', async (req, res) => {
 });
 
 // ==================== POST /api/chat/continue ====================
-// Send query results back to the LLM for a final response
+// Deprecated: query tools are now executed server-side in the Claude loop.
+// Kept for backward compatibility — the frontend will never call this.
 router.post('/continue', async (req, res) => {
-  try {
-    const { requestResults } = req.body;
-
-    if (!requestResults || !Array.isArray(requestResults)) {
-      return error(res, 'requestResults array is required');
-    }
-
-    const householdId = getHouseholdId(req.user);
-    if (!householdId) {
-      return forbidden(res, 'You must belong to a household to use the assistant');
-    }
-
-    // Check the last system message to track rounds
-    const lastSystemMsg = await prisma.chatMessage.findFirst({
-      where: { householdId, role: 'system' },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const currentRound = lastSystemMsg?.metadata?.round || 1;
-    if (currentRound >= MAX_CONTINUE_ROUNDS) {
-      return error(res, 'Maximum data gathering rounds reached');
-    }
-
-    // Build context and history
-    const [context, history] = await Promise.all([
-      buildChatContext(householdId),
-      getConversationHistory(householdId),
-    ]);
-
-    // Call n8n with the query results
-    const n8nResponse = await continueChatWithData({
-      requestResults,
-      history,
-      context,
-    });
-
-    // Handle another data_request (fallback round)
-    if (n8nResponse.type === 'data_request') {
-      const systemMsg = await prisma.chatMessage.create({
-        data: {
-          householdId,
-          role: 'system',
-          content: n8nResponse.message || 'Buscando más información...',
-          metadata: {
-            type: 'data_request',
-            requests: n8nResponse.requests || [],
-            round: currentRound + 1,
-          },
-        },
-      });
-
-      return success(res, {
-        type: 'data_request',
-        messageId: systemMsg.id,
-        message: n8nResponse.message || 'Buscando más información...',
-        requests: n8nResponse.requests || [],
-      });
-    }
-
-    // Handle final response
-    const assistantMsg = await prisma.chatMessage.create({
-      data: {
-        householdId,
-        role: 'assistant',
-        content: n8nResponse.reply || '',
-        toolCalls: n8nResponse.toolCalls && n8nResponse.toolCalls.length > 0
-          ? n8nResponse.toolCalls
-          : undefined,
-        suggestions: n8nResponse.suggestions || [],
-      },
-    });
-
-    return success(res, {
-      type: 'response',
-      messageId: assistantMsg.id,
-      reply: n8nResponse.reply || '',
-      toolCalls: n8nResponse.toolCalls || [],
-      suggestions: n8nResponse.suggestions || [],
-    });
-  } catch (err) {
-    if (err.name === 'TimeoutError' || err.message?.includes('timeout')) {
-      return error(res, 'El asistente tardó demasiado en responder. Intenta de nuevo.', 504);
-    }
-    return serverError(res, err);
-  }
+  return success(res, {
+    type: 'response',
+    messageId: null,
+    reply: 'Este endpoint ya no es necesario. El asistente maneja las consultas internamente.',
+    toolCalls: [],
+    suggestions: [],
+  });
 });
 
 // ==================== GET /api/chat/history ====================

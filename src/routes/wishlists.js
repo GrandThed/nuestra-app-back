@@ -159,6 +159,10 @@ router.delete('/categories/:id', async (req, res) => {
       return forbidden(res, 'You are not a member of this household');
     }
 
+    await prisma.wishlistItem.deleteMany({
+      where: { categoryId: id }
+    });
+
     await prisma.wishlistCategory.delete({
       where: { id }
     });
@@ -344,12 +348,15 @@ router.post('/bulk', async (req, res) => {
       return forbidden(res, 'You are not a member of this household');
     }
 
-    // Resolve category by ID or name
+    // Resolve category by ID or name (auto-create if name doesn't exist)
     let category;
     if (categoryId) {
       category = await prisma.wishlistCategory.findUnique({
         where: { id: categoryId }
       });
+      if (!category || category.householdId !== householdId) {
+        return notFound(res, 'Category not found');
+      }
     } else {
       category = await prisma.wishlistCategory.findFirst({
         where: {
@@ -357,10 +364,20 @@ router.post('/bulk', async (req, res) => {
           name: { equals: categoryName, mode: 'insensitive' }
         }
       });
-    }
-
-    if (!category || category.householdId !== householdId) {
-      return notFound(res, 'Category not found');
+      if (!category) {
+        // Auto-create the category (e.g. shopping lists from menu planner)
+        const maxOrder = await prisma.wishlistCategory.aggregate({
+          where: { householdId },
+          _max: { sortOrder: true }
+        });
+        category = await prisma.wishlistCategory.create({
+          data: {
+            householdId,
+            name: categoryName,
+            sortOrder: (maxOrder._max.sortOrder || 0) + 1
+          }
+        });
+      }
     }
 
     const createdItems = await prisma.wishlistItem.createMany({

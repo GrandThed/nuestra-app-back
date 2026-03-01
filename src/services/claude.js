@@ -210,8 +210,10 @@ Crea una receta nueva en el recetario.
 Parámetros: { title (string, requerido), ingredients (array de {name, quantity, unit}), instructions (array de strings), servings (integer), prepTimeMinutes (integer), cookTimeMinutes (integer) }
 
 #### add_wishlist_items
-Agrega items a una categoría de lista. IMPORTANTE: Usá EXACTAMENTE uno de los nombres/IDs de categoría del contexto.
-Parámetros: { categoryName (string, DEBE ser uno de los de arriba), items (array de {name, quantity?, unit?, notes?}) }
+Agrega items a una categoría de lista.
+Si la categoría ya existe, usá EXACTAMENTE el nombre del contexto.
+Si necesitás crear una lista de compras para un menú semanal, usá el formato: "Supermercado Lun DD - Lun DD" (ej: "Supermercado Lun 3 - Lun 10") con las fechas del período. SIEMPRE en español.
+Parámetros: { categoryName (string), items (array de {name, quantity?, unit?, notes?}) }
 
 #### create_expense
 Registra un gasto.

@@ -193,6 +193,40 @@ router.get('/history', async (req, res) => {
   }
 });
 
+// ==================== DELETE /api/chat/history/from/:messageId ====================
+// Delete a message and all messages after it (backtrack)
+router.delete('/history/from/:messageId', async (req, res) => {
+  try {
+    const householdId = getHouseholdId(req.user);
+    if (!householdId) {
+      return forbidden(res, 'You must belong to a household');
+    }
+
+    const { messageId } = req.params;
+
+    // Find the target message
+    const targetMessage = await prisma.chatMessage.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!targetMessage || targetMessage.householdId !== householdId) {
+      return error(res, 'Message not found', 404);
+    }
+
+    // Delete the target message and all messages after it
+    await prisma.chatMessage.deleteMany({
+      where: {
+        householdId,
+        createdAt: { gte: targetMessage.createdAt },
+      },
+    });
+
+    return success(res, { deleted: true });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
 // ==================== DELETE /api/chat/history ====================
 // Clear all chat messages for the household
 router.delete('/history', async (req, res) => {

@@ -330,20 +330,34 @@ router.post('/', async (req, res) => {
  */
 router.post('/bulk', async (req, res) => {
   try {
-    const { householdId, categoryId, items } = req.body;
+    const { householdId, categoryId, categoryName, items } = req.body;
 
-    if (!householdId || !categoryId || !Array.isArray(items) || items.length === 0) {
-      return error(res, 'householdId, categoryId, and items array are required');
+    if (!householdId || !Array.isArray(items) || items.length === 0) {
+      return error(res, 'householdId and items array are required');
+    }
+
+    if (!categoryId && !categoryName) {
+      return error(res, 'categoryId or categoryName is required');
     }
 
     if (!isMember(req.user, householdId)) {
       return forbidden(res, 'You are not a member of this household');
     }
 
-    // Verify category belongs to household
-    const category = await prisma.wishlistCategory.findUnique({
-      where: { id: categoryId }
-    });
+    // Resolve category by ID or name
+    let category;
+    if (categoryId) {
+      category = await prisma.wishlistCategory.findUnique({
+        where: { id: categoryId }
+      });
+    } else {
+      category = await prisma.wishlistCategory.findFirst({
+        where: {
+          householdId,
+          name: { equals: categoryName, mode: 'insensitive' }
+        }
+      });
+    }
 
     if (!category || category.householdId !== householdId) {
       return notFound(res, 'Category not found');
@@ -352,7 +366,7 @@ router.post('/bulk', async (req, res) => {
     const createdItems = await prisma.wishlistItem.createMany({
       data: items.map(item => ({
         householdId,
-        categoryId,
+        categoryId: category.id,
         name: item.name,
         quantity: item.quantity,
         unit: item.unit,

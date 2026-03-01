@@ -7,7 +7,7 @@ const {
   getExpenseSummary,
 } = require('./chatQueryTools');
 
-const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-6-20250514';
+const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5';
 const MAX_TOOL_ITERATIONS = 5;
 
 const anthropic = new Anthropic.default({

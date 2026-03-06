@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const prisma = require('../lib/prisma');
-const { success, error, forbidden, serverError } = require('../lib/response');
+const { success, created, error, forbidden, serverError } = require('../lib/response');
 const { runChatLoop } = require('../services/claude');
 const { buildChatContext } = require('../services/chatContext');
 
@@ -241,6 +241,144 @@ router.delete('/history', async (req, res) => {
     });
 
     return success(res, { cleared: true });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+// ==================== POST /api/chat/actions/add-menu-item ====================
+// Smart endpoint: resolves recipeName to recipeId, finds/creates a weekly plan
+router.post('/actions/add-menu-item', async (req, res) => {
+  try {
+    const { householdId, recipeName, customName, date, mealType } = req.body;
+
+    if (!householdId || !date || !mealType) {
+      return error(res, 'householdId, date, and mealType are required');
+    }
+
+    if (!recipeName && !customName) {
+      return error(res, 'Either recipeName or customName is required');
+    }
+
+    const userHouseholdId = getHouseholdId(req.user);
+    if (userHouseholdId !== householdId) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    // Map Spanish meal types to English
+    const mealTypeMap = {
+      'desayuno': 'breakfast',
+      'almuerzo': 'lunch',
+      'merienda': 'snack',
+      'cena': 'dinner',
+    };
+    const resolvedMealType = mealTypeMap[mealType] || mealType;
+
+    const validMealTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
+    if (!validMealTypes.includes(resolvedMealType)) {
+      return error(res, `mealType must be one of: ${validMealTypes.join(', ')} or desayuno/almuerzo/merienda/cena`);
+    }
+
+    // 1. Resolve recipe
+    let recipeId = null;
+    const nameToSearch = recipeName || customName;
+
+    // Try exact match first, then fuzzy
+    let recipe = await prisma.recipe.findFirst({
+      where: {
+        householdId,
+        title: { equals: nameToSearch, mode: 'insensitive' },
+      },
+    });
+
+    if (!recipe) {
+      // Try contains match
+      recipe = await prisma.recipe.findFirst({
+        where: {
+          householdId,
+          title: { contains: nameToSearch, mode: 'insensitive' },
+        },
+      });
+    }
+
+    if (recipe) {
+      recipeId = recipe.id;
+    } else {
+      // Create a minimal recipe with the given name
+      recipe = await prisma.recipe.create({
+        data: {
+          householdId,
+          title: nameToSearch,
+          ingredients: [],
+          instructions: [],
+        },
+      });
+      recipeId = recipe.id;
+    }
+
+    // 2. Find or create a menu plan for the week containing this date
+    const itemDate = new Date(date);
+    const dayOfWeek = itemDate.getDay(); // 0=Sun, 1=Mon, ...
+    const monday = new Date(itemDate);
+    monday.setDate(monday.getDate() - ((dayOfWeek + 6) % 7)); // Go back to Monday
+    monday.setHours(0, 0, 0, 0);
+
+    const sunday = new Date(monday);
+    sunday.setDate(sunday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    // Look for an existing plan that has items in this week's range
+    let menuPlan = await prisma.menuPlan.findFirst({
+      where: {
+        householdId,
+        items: {
+          some: {
+            date: { gte: monday, lte: sunday },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!menuPlan) {
+      // Create a new plan for this week
+      const formatShortDate = (d) => {
+        const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        return `${days[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`;
+      };
+      menuPlan = await prisma.menuPlan.create({
+        data: {
+          householdId,
+          name: `Menú ${formatShortDate(monday)} - ${formatShortDate(sunday)}`,
+        },
+      });
+    }
+
+    // 3. Create the menu item
+    const menuItem = await prisma.menuItem.create({
+      data: {
+        menuPlanId: menuPlan.id,
+        recipeId,
+        date: new Date(date),
+        mealType: resolvedMealType,
+      },
+      include: {
+        recipe: {
+          select: { id: true, title: true, imageUrl: true },
+        },
+      },
+    });
+
+    return created(res, {
+      item: {
+        id: menuItem.id,
+        date: menuItem.date,
+        mealType: menuItem.mealType,
+        recipe: menuItem.recipe,
+        menuPlanId: menuPlan.id,
+        menuPlanName: menuPlan.name,
+      },
+    });
   } catch (err) {
     return serverError(res, err);
   }

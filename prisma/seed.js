@@ -15,71 +15,96 @@ const prisma = new PrismaClient();
  */
 const SEASONAL_VEGETABLES = [
   // Year-round vegetables (available all year)
-  { name: 'Potato', startWeek: 1, endWeek: 52 },
-  { name: 'Onion', startWeek: 1, endWeek: 52 },
-  { name: 'Garlic', startWeek: 1, endWeek: 52 },
-  { name: 'Carrot', startWeek: 1, endWeek: 52 },
-  { name: 'Celery', startWeek: 1, endWeek: 52 },
+  { name: 'Potato', nameEs: 'Papa', namePt: 'Batata', startWeek: 1, endWeek: 52 },
+  { name: 'Onion', nameEs: 'Cebolla', namePt: 'Cebola', startWeek: 1, endWeek: 52 },
+  { name: 'Garlic', nameEs: 'Ajo', namePt: 'Alho', startWeek: 1, endWeek: 52 },
+  { name: 'Carrot', nameEs: 'Zanahoria', namePt: 'Cenoura', startWeek: 1, endWeek: 52 },
+  { name: 'Celery', nameEs: 'Apio', namePt: 'Aipo', startWeek: 1, endWeek: 52 },
 
   // Spring vegetables (weeks 13-24)
-  { name: 'Asparagus', startWeek: 13, endWeek: 24 },
-  { name: 'Artichoke', startWeek: 10, endWeek: 22 },
-  { name: 'Pea', startWeek: 14, endWeek: 26 },
-  { name: 'Spinach', startWeek: 10, endWeek: 22 },
-  { name: 'Lettuce', startWeek: 12, endWeek: 44 },
-  { name: 'Radish', startWeek: 12, endWeek: 24 },
-  { name: 'Spring Onion', startWeek: 12, endWeek: 28 },
-  { name: 'Leek', startWeek: 36, endWeek: 16 }, // Fall through Spring (wraps)
+  { name: 'Asparagus', nameEs: 'Espárrago', namePt: 'Aspargo', startWeek: 13, endWeek: 24 },
+  { name: 'Artichoke', nameEs: 'Alcachofa', namePt: 'Alcachofra', startWeek: 10, endWeek: 22 },
+  { name: 'Pea', nameEs: 'Arveja', namePt: 'Ervilha', startWeek: 14, endWeek: 26 },
+  { name: 'Spinach', nameEs: 'Espinaca', namePt: 'Espinafre', startWeek: 10, endWeek: 22 },
+  { name: 'Lettuce', nameEs: 'Lechuga', namePt: 'Alface', startWeek: 12, endWeek: 44 },
+  { name: 'Radish', nameEs: 'Rábano', namePt: 'Rabanete', startWeek: 12, endWeek: 24 },
+  { name: 'Spring Onion', nameEs: 'Cebollín', namePt: 'Cebolinha', startWeek: 12, endWeek: 28 },
+  { name: 'Leek', nameEs: 'Puerro', namePt: 'Alho-poró', startWeek: 36, endWeek: 16 }, // Fall through Spring (wraps)
 
   // Summer vegetables (weeks 25-37)
-  { name: 'Tomato', startWeek: 24, endWeek: 40 },
-  { name: 'Zucchini', startWeek: 22, endWeek: 38 },
-  { name: 'Eggplant', startWeek: 26, endWeek: 38 },
-  { name: 'Pepper', startWeek: 24, endWeek: 40 },
-  { name: 'Cucumber', startWeek: 22, endWeek: 36 },
-  { name: 'Corn', startWeek: 26, endWeek: 38 },
-  { name: 'Green Bean', startWeek: 24, endWeek: 38 },
-  { name: 'Basil', startWeek: 22, endWeek: 38 },
-  { name: 'Watermelon', startWeek: 26, endWeek: 36 },
-  { name: 'Melon', startWeek: 26, endWeek: 36 },
+  { name: 'Tomato', nameEs: 'Tomate', namePt: 'Tomate', startWeek: 24, endWeek: 40 },
+  { name: 'Zucchini', nameEs: 'Calabacín', namePt: 'Abobrinha', startWeek: 22, endWeek: 38 },
+  { name: 'Eggplant', nameEs: 'Berenjena', namePt: 'Berinjela', startWeek: 26, endWeek: 38 },
+  { name: 'Pepper', nameEs: 'Pimiento', namePt: 'Pimentão', startWeek: 24, endWeek: 40 },
+  { name: 'Cucumber', nameEs: 'Pepino', namePt: 'Pepino', startWeek: 22, endWeek: 36 },
+  { name: 'Corn', nameEs: 'Maíz', namePt: 'Milho', startWeek: 26, endWeek: 38 },
+  { name: 'Green Bean', nameEs: 'Judía verde', namePt: 'Vagem', startWeek: 24, endWeek: 38 },
+  { name: 'Basil', nameEs: 'Albahaca', namePt: 'Manjericão', startWeek: 22, endWeek: 38 },
 
   // Fall vegetables (weeks 38-50)
-  { name: 'Pumpkin', startWeek: 36, endWeek: 48 },
-  { name: 'Butternut Squash', startWeek: 36, endWeek: 50 },
-  { name: 'Sweet Potato', startWeek: 36, endWeek: 50 },
-  { name: 'Beet', startWeek: 24, endWeek: 46 },
-  { name: 'Turnip', startWeek: 38, endWeek: 14 }, // Fall through Winter (wraps)
-  { name: 'Parsnip', startWeek: 40, endWeek: 12 }, // Fall through Winter (wraps)
-  { name: 'Brussels Sprout', startWeek: 38, endWeek: 6 }, // Fall through early Winter (wraps)
-  { name: 'Apple', startWeek: 34, endWeek: 48 },
-  { name: 'Pear', startWeek: 32, endWeek: 46 },
-  { name: 'Grape', startWeek: 32, endWeek: 44 },
+  { name: 'Pumpkin', nameEs: 'Calabaza', namePt: 'Abóbora', startWeek: 36, endWeek: 48 },
+  { name: 'Butternut Squash', nameEs: 'Calabaza butternut', namePt: 'Abóbora butternut', startWeek: 36, endWeek: 50 },
+  { name: 'Sweet Potato', nameEs: 'Batata', namePt: 'Batata-doce', startWeek: 36, endWeek: 50 },
+  { name: 'Beet', nameEs: 'Remolacha', namePt: 'Beterraba', startWeek: 24, endWeek: 46 },
+  { name: 'Turnip', nameEs: 'Nabo', namePt: 'Nabo', startWeek: 38, endWeek: 14 }, // Fall through Winter (wraps)
+  { name: 'Parsnip', nameEs: 'Chirivía', namePt: 'Pastinaga', startWeek: 40, endWeek: 12 }, // Fall through Winter (wraps)
+  { name: 'Brussels Sprout', nameEs: 'Col de Bruselas', namePt: 'Couve-de-bruxelas', startWeek: 38, endWeek: 6 }, // Fall through early Winter (wraps)
 
   // Winter vegetables (weeks 51-52, 1-12)
-  { name: 'Cabbage', startWeek: 1, endWeek: 52 }, // Almost year-round but best in cool weather
-  { name: 'Kale', startWeek: 38, endWeek: 14 }, // Fall through Winter (wraps)
-  { name: 'Broccoli', startWeek: 38, endWeek: 20 }, // Fall through Spring (wraps)
-  { name: 'Cauliflower', startWeek: 38, endWeek: 20 }, // Fall through Spring (wraps)
-  { name: 'Chard', startWeek: 14, endWeek: 46 },
-  { name: 'Endive', startWeek: 40, endWeek: 14 }, // Fall through Winter (wraps)
-  { name: 'Fennel', startWeek: 38, endWeek: 14 }, // Fall through Winter (wraps)
-
-  // Citrus (Winter - early Spring in Northern Hemisphere)
-  { name: 'Orange', startWeek: 48, endWeek: 14 }, // Winter (wraps)
-  { name: 'Lemon', startWeek: 48, endWeek: 18 }, // Winter through early Spring (wraps)
-  { name: 'Grapefruit', startWeek: 48, endWeek: 14 }, // Winter (wraps)
-  { name: 'Mandarin', startWeek: 46, endWeek: 10 }, // Winter (wraps)
-
-  // Berries (Spring - Summer)
-  { name: 'Strawberry', startWeek: 18, endWeek: 28 },
-  { name: 'Blueberry', startWeek: 24, endWeek: 36 },
-  { name: 'Raspberry', startWeek: 24, endWeek: 38 },
-  { name: 'Blackberry', startWeek: 28, endWeek: 38 },
+  { name: 'Cabbage', nameEs: 'Repollo', namePt: 'Repolho', startWeek: 1, endWeek: 52 },
+  { name: 'Kale', nameEs: 'Col rizada', namePt: 'Couve', startWeek: 38, endWeek: 14 }, // Fall through Winter (wraps)
+  { name: 'Broccoli', nameEs: 'Brócoli', namePt: 'Brócolis', startWeek: 38, endWeek: 20 }, // Fall through Spring (wraps)
+  { name: 'Cauliflower', nameEs: 'Coliflor', namePt: 'Couve-flor', startWeek: 38, endWeek: 20 }, // Fall through Spring (wraps)
+  { name: 'Chard', nameEs: 'Acelga', namePt: 'Acelga', startWeek: 14, endWeek: 46 },
+  { name: 'Endive', nameEs: 'Endivia', namePt: 'Endívia', startWeek: 40, endWeek: 14 }, // Fall through Winter (wraps)
+  { name: 'Fennel', nameEs: 'Hinojo', namePt: 'Funcho', startWeek: 38, endWeek: 14 }, // Fall through Winter (wraps)
 
   // Other common produce
-  { name: 'Mushroom', startWeek: 1, endWeek: 52 }, // Cultivated year-round
-  { name: 'Avocado', startWeek: 1, endWeek: 52 }, // Imported year-round
-  { name: 'Banana', startWeek: 1, endWeek: 52 }, // Imported year-round
+  { name: 'Mushroom', nameEs: 'Champiñón', namePt: 'Cogumelo', startWeek: 1, endWeek: 52 }, // Cultivated year-round
+];
+
+/**
+ * Seasonal fruits data (Northern Hemisphere)
+ */
+const SEASONAL_FRUITS = [
+  // Citrus (Winter - early Spring)
+  { name: 'Orange', nameEs: 'Naranja', namePt: 'Laranja', startWeek: 48, endWeek: 14 },
+  { name: 'Lemon', nameEs: 'Limón', namePt: 'Limão', startWeek: 48, endWeek: 18 },
+  { name: 'Grapefruit', nameEs: 'Pomelo', namePt: 'Toranja', startWeek: 48, endWeek: 14 },
+  { name: 'Mandarin', nameEs: 'Mandarina', namePt: 'Tangerina', startWeek: 46, endWeek: 10 },
+  { name: 'Lime', nameEs: 'Lima', namePt: 'Lima', startWeek: 20, endWeek: 40 },
+
+  // Berries (Spring - Summer)
+  { name: 'Strawberry', nameEs: 'Fresa', namePt: 'Morango', startWeek: 18, endWeek: 28 },
+  { name: 'Blueberry', nameEs: 'Arándano', namePt: 'Mirtilo', startWeek: 24, endWeek: 36 },
+  { name: 'Raspberry', nameEs: 'Frambuesa', namePt: 'Framboesa', startWeek: 24, endWeek: 38 },
+  { name: 'Blackberry', nameEs: 'Mora', namePt: 'Amora', startWeek: 28, endWeek: 38 },
+  { name: 'Cherry', nameEs: 'Cereza', namePt: 'Cereja', startWeek: 20, endWeek: 28 },
+
+  // Summer fruits
+  { name: 'Watermelon', nameEs: 'Sandía', namePt: 'Melancia', startWeek: 26, endWeek: 36 },
+  { name: 'Melon', nameEs: 'Melón', namePt: 'Melão', startWeek: 26, endWeek: 36 },
+  { name: 'Peach', nameEs: 'Durazno', namePt: 'Pêssego', startWeek: 22, endWeek: 36 },
+  { name: 'Nectarine', nameEs: 'Nectarina', namePt: 'Nectarina', startWeek: 24, endWeek: 36 },
+  { name: 'Apricot', nameEs: 'Damasco', namePt: 'Damasco', startWeek: 20, endWeek: 30 },
+  { name: 'Plum', nameEs: 'Ciruela', namePt: 'Ameixa', startWeek: 24, endWeek: 38 },
+  { name: 'Fig', nameEs: 'Higo', namePt: 'Figo', startWeek: 30, endWeek: 42 },
+
+  // Fall fruits
+  { name: 'Apple', nameEs: 'Manzana', namePt: 'Maçã', startWeek: 34, endWeek: 48 },
+  { name: 'Pear', nameEs: 'Pera', namePt: 'Pera', startWeek: 32, endWeek: 46 },
+  { name: 'Grape', nameEs: 'Uva', namePt: 'Uva', startWeek: 32, endWeek: 44 },
+  { name: 'Pomegranate', nameEs: 'Granada', namePt: 'Romã', startWeek: 38, endWeek: 48 },
+  { name: 'Quince', nameEs: 'Membrillo', namePt: 'Marmelo', startWeek: 38, endWeek: 46 },
+  { name: 'Persimmon', nameEs: 'Caqui', namePt: 'Caqui', startWeek: 40, endWeek: 50 },
+
+  // Tropical / Year-round (imported)
+  { name: 'Banana', nameEs: 'Banana', namePt: 'Banana', startWeek: 1, endWeek: 52 },
+  { name: 'Avocado', nameEs: 'Palta', namePt: 'Abacate', startWeek: 1, endWeek: 52 },
+  { name: 'Pineapple', nameEs: 'Ananá', namePt: 'Abacaxi', startWeek: 1, endWeek: 52 },
+  { name: 'Mango', nameEs: 'Mango', namePt: 'Manga', startWeek: 18, endWeek: 36 },
+  { name: 'Kiwi', nameEs: 'Kiwi', namePt: 'Kiwi', startWeek: 40, endWeek: 14 },
+  { name: 'Coconut', nameEs: 'Coco', namePt: 'Coco', startWeek: 1, endWeek: 52 },
 ];
 
 async function main() {
@@ -89,6 +114,8 @@ async function main() {
     await prisma.seasonalVegetable.upsert({
       where: { name: veg.name },
       update: {
+        nameEs: veg.nameEs,
+        namePt: veg.namePt,
         startWeek: veg.startWeek,
         endWeek: veg.endWeek
       },
@@ -96,7 +123,30 @@ async function main() {
     });
   }
 
+  // Delete fruits that were previously in the vegetables table
+  const fruitNames = SEASONAL_FRUITS.map(f => f.name);
+  await prisma.seasonalVegetable.deleteMany({
+    where: { name: { in: fruitNames } }
+  });
+
   console.log(`Seeded ${SEASONAL_VEGETABLES.length} vegetables`);
+
+  console.log('Seeding seasonal fruits...');
+
+  for (const fruit of SEASONAL_FRUITS) {
+    await prisma.seasonalFruit.upsert({
+      where: { name: fruit.name },
+      update: {
+        nameEs: fruit.nameEs,
+        namePt: fruit.namePt,
+        startWeek: fruit.startWeek,
+        endWeek: fruit.endWeek
+      },
+      create: fruit
+    });
+  }
+
+  console.log(`Seeded ${SEASONAL_FRUITS.length} fruits`);
 }
 
 main()

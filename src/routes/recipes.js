@@ -43,13 +43,20 @@ const isWeekInSeason = (week, startWeek, endWeek) => {
 };
 
 /**
- * Adjust week for hemisphere (Southern = +26 weeks, wrapping at 52)
+ * Get the start/end weeks for an item based on hemisphere.
+ * Uses dedicated south columns if available, otherwise falls back to offset.
  */
-const adjustWeekForHemisphere = (week, hemisphere) => {
+const getSeasonWeeks = (item, hemisphere) => {
   if (hemisphere === 'south') {
-    return ((week + 25) % 52) + 1; // Offset by 26 weeks
+    if (item.startWeekSouth != null && item.endWeekSouth != null) {
+      return { startWeek: item.startWeekSouth, endWeek: item.endWeekSouth };
+    }
+    // Fallback: offset by 26 weeks
+    const offsetStart = ((item.startWeek + 25) % 52) + 1;
+    const offsetEnd = ((item.endWeek + 25) % 52) + 1;
+    return { startWeek: offsetStart, endWeek: offsetEnd };
   }
-  return week;
+  return { startWeek: item.startWeek, endWeek: item.endWeek };
 };
 
 /**
@@ -252,21 +259,23 @@ router.get('/seasonal-vegetables', async (req, res) => {
     }
 
     const currentWeek = getCurrentWeek();
-    const adjustedWeek = adjustWeekForHemisphere(currentWeek, household.hemisphere);
 
     const vegetables = await prisma.seasonalVegetable.findMany({
       orderBy: { name: 'asc' }
     });
 
-    const vegsWithSeasonality = vegetables.map(veg => ({
-      id: veg.id,
-      name: veg.name,
-      nameEs: veg.nameEs,
-      namePt: veg.namePt,
-      inSeason: isWeekInSeason(adjustedWeek, veg.startWeek, veg.endWeek),
-      startWeek: veg.startWeek,
-      endWeek: veg.endWeek
-    }));
+    const vegsWithSeasonality = vegetables.map(veg => {
+      const { startWeek, endWeek } = getSeasonWeeks(veg, household.hemisphere);
+      return {
+        id: veg.id,
+        name: veg.name,
+        nameEs: veg.nameEs,
+        namePt: veg.namePt,
+        inSeason: isWeekInSeason(currentWeek, startWeek, endWeek),
+        startWeek,
+        endWeek
+      };
+    });
 
     return success(res, {
       currentWeek,
@@ -306,21 +315,23 @@ router.get('/seasonal-fruits', async (req, res) => {
     }
 
     const currentWeek = getCurrentWeek();
-    const adjustedWeek = adjustWeekForHemisphere(currentWeek, household.hemisphere);
 
     const fruits = await prisma.seasonalFruit.findMany({
       orderBy: { name: 'asc' }
     });
 
-    const fruitsWithSeasonality = fruits.map(fruit => ({
-      id: fruit.id,
-      name: fruit.name,
-      nameEs: fruit.nameEs,
-      namePt: fruit.namePt,
-      inSeason: isWeekInSeason(adjustedWeek, fruit.startWeek, fruit.endWeek),
-      startWeek: fruit.startWeek,
-      endWeek: fruit.endWeek
-    }));
+    const fruitsWithSeasonality = fruits.map(fruit => {
+      const { startWeek, endWeek } = getSeasonWeeks(fruit, household.hemisphere);
+      return {
+        id: fruit.id,
+        name: fruit.name,
+        nameEs: fruit.nameEs,
+        namePt: fruit.namePt,
+        inSeason: isWeekInSeason(currentWeek, startWeek, endWeek),
+        startWeek,
+        endWeek
+      };
+    });
 
     return success(res, {
       currentWeek,
@@ -467,7 +478,7 @@ router.get('/:id', async (req, res) => {
 
     // Calculate seasonality based on ingredients
     const currentWeek = getCurrentWeek();
-    const adjustedWeek = adjustWeekForHemisphere(currentWeek, recipe.household.hemisphere);
+    const hemisphere = recipe.household.hemisphere;
 
     // Get seasonal vegetables and fruits
     const [seasonalVegs, seasonalFruits] = await Promise.all([
@@ -484,9 +495,10 @@ router.get('/:id', async (req, res) => {
           v => ing.name && v.name.toLowerCase() === ing.name.toLowerCase()
         );
         if (match) {
+          const { startWeek, endWeek } = getSeasonWeeks(match, hemisphere);
           ingredientSeasonality.push({
             name: ing.name,
-            inSeason: isWeekInSeason(adjustedWeek, match.startWeek, match.endWeek)
+            inSeason: isWeekInSeason(currentWeek, startWeek, endWeek)
           });
         }
       }

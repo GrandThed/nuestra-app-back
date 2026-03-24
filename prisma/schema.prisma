@@ -226,21 +226,25 @@ model RecipeFavorite {
 }
 
 model SeasonalVegetable {
-  id        String  @id @default(uuid())
-  name      String  @unique
-  nameEs    String? // Spanish translation
-  namePt    String? // Portuguese translation
-  startWeek Int     // 1-52, week when vegetable comes in season (Northern Hemisphere)
-  endWeek   Int     // 1-52, week when vegetable goes out of season (if endWeek < startWeek, it wraps around year)
+  id             String  @id @default(uuid())
+  name           String  @unique
+  nameEs         String? // Spanish translation
+  namePt         String? // Portuguese translation
+  startWeek      Int     // 1-52, Northern Hemisphere start week
+  endWeek        Int     // 1-52, Northern Hemisphere end week (wraps if < startWeek)
+  startWeekSouth Int?    // 1-52, Southern Hemisphere start week (null = use offset)
+  endWeekSouth   Int?    // 1-52, Southern Hemisphere end week (null = use offset)
 }
 
 model SeasonalFruit {
-  id        String  @id @default(uuid())
-  name      String  @unique
-  nameEs    String? // Spanish translation
-  namePt    String? // Portuguese translation
-  startWeek Int     // 1-52, week when fruit comes in season (Northern Hemisphere)
-  endWeek   Int     // 1-52, week when fruit goes out of season (if endWeek < startWeek, it wraps around year)
+  id             String  @id @default(uuid())
+  name           String  @unique
+  nameEs         String? // Spanish translation
+  namePt         String? // Portuguese translation
+  startWeek      Int     // 1-52, Northern Hemisphere start week
+  endWeek        Int     // 1-52, Northern Hemisphere end week (wraps if < startWeek)
+  startWeekSouth Int?    // 1-52, Southern Hemisphere start week (null = use offset)
+  endWeekSouth   Int?    // 1-52, Southern Hemisphere end week (null = use offset)
 }
 
 // ==================== MENU PLANNER ====================

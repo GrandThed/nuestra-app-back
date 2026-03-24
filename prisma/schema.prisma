@@ -226,10 +226,21 @@ model RecipeFavorite {
 }
 
 model SeasonalVegetable {
-  id        String @id @default(uuid())
-  name      String @unique
-  startWeek Int    // 1-52, week when vegetable comes in season (Northern Hemisphere)
-  endWeek   Int    // 1-52, week when vegetable goes out of season (if endWeek < startWeek, it wraps around year)
+  id        String  @id @default(uuid())
+  name      String  @unique
+  nameEs    String? // Spanish translation
+  namePt    String? // Portuguese translation
+  startWeek Int     // 1-52, week when vegetable comes in season (Northern Hemisphere)
+  endWeek   Int     // 1-52, week when vegetable goes out of season (if endWeek < startWeek, it wraps around year)
+}
+
+model SeasonalFruit {
+  id        String  @id @default(uuid())
+  name      String  @unique
+  nameEs    String? // Spanish translation
+  namePt    String? // Portuguese translation
+  startWeek Int     // 1-52, week when fruit comes in season (Northern Hemisphere)
+  endWeek   Int     // 1-52, week when fruit goes out of season (if endWeek < startWeek, it wraps around year)
 }
 
 // ==================== MENU PLANNER ====================

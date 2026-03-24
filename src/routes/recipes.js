@@ -261,6 +261,8 @@ router.get('/seasonal-vegetables', async (req, res) => {
     const vegsWithSeasonality = vegetables.map(veg => ({
       id: veg.id,
       name: veg.name,
+      nameEs: veg.nameEs,
+      namePt: veg.namePt,
       inSeason: isWeekInSeason(adjustedWeek, veg.startWeek, veg.endWeek),
       startWeek: veg.startWeek,
       endWeek: veg.endWeek
@@ -270,6 +272,60 @@ router.get('/seasonal-vegetables', async (req, res) => {
       currentWeek,
       hemisphere: household.hemisphere,
       vegetables: vegsWithSeasonality
+    });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
+ * GET /api/recipes/seasonal-fruits
+ * Get list of seasonal fruits with current availability
+ * NOTE: This route MUST be defined before /:id routes
+ */
+router.get('/seasonal-fruits', async (req, res) => {
+  try {
+    const { householdId } = req.query;
+
+    if (!householdId) {
+      return error(res, 'householdId is required');
+    }
+
+    if (!isMember(req.user, householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    // Get household hemisphere
+    const household = await prisma.household.findUnique({
+      where: { id: householdId },
+      select: { hemisphere: true }
+    });
+
+    if (!household) {
+      return notFound(res, 'Household not found');
+    }
+
+    const currentWeek = getCurrentWeek();
+    const adjustedWeek = adjustWeekForHemisphere(currentWeek, household.hemisphere);
+
+    const fruits = await prisma.seasonalFruit.findMany({
+      orderBy: { name: 'asc' }
+    });
+
+    const fruitsWithSeasonality = fruits.map(fruit => ({
+      id: fruit.id,
+      name: fruit.name,
+      nameEs: fruit.nameEs,
+      namePt: fruit.namePt,
+      inSeason: isWeekInSeason(adjustedWeek, fruit.startWeek, fruit.endWeek),
+      startWeek: fruit.startWeek,
+      endWeek: fruit.endWeek
+    }));
+
+    return success(res, {
+      currentWeek,
+      hemisphere: household.hemisphere,
+      fruits: fruitsWithSeasonality
     });
   } catch (err) {
     return serverError(res, err);
@@ -413,20 +469,24 @@ router.get('/:id', async (req, res) => {
     const currentWeek = getCurrentWeek();
     const adjustedWeek = adjustWeekForHemisphere(currentWeek, recipe.household.hemisphere);
 
-    // Get seasonal vegetables
-    const seasonalVegs = await prisma.seasonalVegetable.findMany();
+    // Get seasonal vegetables and fruits
+    const [seasonalVegs, seasonalFruits] = await Promise.all([
+      prisma.seasonalVegetable.findMany(),
+      prisma.seasonalFruit.findMany()
+    ]);
+    const allSeasonal = [...seasonalVegs, ...seasonalFruits];
 
     // Check which ingredients are in season
     const ingredientSeasonality = [];
     if (Array.isArray(recipe.ingredients)) {
       for (const ing of recipe.ingredients) {
-        const vegMatch = seasonalVegs.find(
+        const match = allSeasonal.find(
           v => ing.name && v.name.toLowerCase() === ing.name.toLowerCase()
         );
-        if (vegMatch) {
+        if (match) {
           ingredientSeasonality.push({
             name: ing.name,
-            inSeason: isWeekInSeason(adjustedWeek, vegMatch.startWeek, vegMatch.endWeek)
+            inSeason: isWeekInSeason(adjustedWeek, match.startWeek, match.endWeek)
           });
         }
       }

@@ -35,10 +35,12 @@ const getConversationHistory = async (householdId, limit = HISTORY_LIMIT) => {
     },
   });
 
-  // Reverse to chronological order
+  // Reverse to chronological order, strip tool markers from assistant messages
   return messages.reverse().map((m) => ({
     role: m.role === 'system' ? 'assistant' : m.role,
-    content: m.content,
+    content: m.role === 'assistant'
+      ? (m.content || '').replace(/\{\{tool:\d+\}\}/g, '').replace(/\n{3,}/g, '\n\n').trim()
+      : m.content,
     ...(m.imageUrls.length > 0 && { imageUrls: m.imageUrls }),
   }));
 };

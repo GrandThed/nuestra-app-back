@@ -16,6 +16,36 @@ const isMember = (user, householdId) => {
 };
 
 /**
+ * Serialize an expense (with included category, paidBy, and splits) into the
+ * shape the client expects. Always includes the computed `allSettled` flag so
+ * settled state stays consistent across create/update/settle/list responses.
+ */
+const serializeExpense = (exp) => ({
+  id: exp.id,
+  householdId: exp.householdId,
+  description: exp.description,
+  amount: exp.amount,
+  currency: exp.currency,
+  date: exp.date,
+  receiptUrl: exp.receiptUrl,
+  category: exp.category ?? null,
+  paidBy: exp.paidBy ?? null,
+  recurringExpenseId: exp.recurringExpenseId ?? null,
+  linkedWishlistItemId: exp.linkedWishlistItemId ?? null,
+  splits: (exp.splits || []).map(s => ({
+    id: s.id,
+    userId: s.userId,
+    user: s.user,
+    amount: s.amount,
+    customAmount: s.customAmount,
+    isCustom: s.isCustom,
+    settled: s.settled
+  })),
+  allSettled: (exp.splits || []).length > 0 && exp.splits.every(s => s.settled),
+  createdAt: exp.createdAt
+});
+
+/**
  * Calculate expense splits based on household splitMode setting
  * If splitMode is "proportional" and members have income, splits by income ratio
  * Otherwise splits equally
@@ -736,7 +766,7 @@ router.post('/recurring/generate', async (req, res) => {
 
     return success(res, {
       generatedCount: generatedExpenses.length,
-      expenses: generatedExpenses
+      expenses: generatedExpenses.map(serializeExpense)
     });
   } catch (err) {
     return serverError(res, err);
@@ -1285,7 +1315,7 @@ router.get('/export', async (req, res) => {
  */
 router.get('/', async (req, res) => {
   try {
-    const { householdId, categoryId, paidById, month, year, settled } = req.query;
+    const { householdId, categoryId, paidById, month, year, settled, from, to } = req.query;
 
     if (!householdId) {
       return error(res, 'householdId is required');
@@ -1299,8 +1329,14 @@ router.get('/', async (req, res) => {
     if (categoryId) where.categoryId = categoryId;
     if (paidById) where.paidById = paidById;
 
-    // Filter by month/year
-    if (month && year) {
+    // Arbitrary date range (takes precedence over month/year). Used for things
+    // like building description suggestions from the last few months.
+    if (from && to) {
+      where.date = {
+        gte: new Date(from),
+        lte: new Date(to)
+      };
+    } else if (month && year) {
       const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
       const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
       where.date = {
@@ -1347,30 +1383,7 @@ router.get('/', async (req, res) => {
     }
 
     return success(res, {
-      expenses: expenses.map(exp => ({
-        id: exp.id,
-        householdId: exp.householdId,
-        description: exp.description,
-        amount: exp.amount,
-        currency: exp.currency,
-        date: exp.date,
-        receiptUrl: exp.receiptUrl,
-        category: exp.category,
-        paidBy: exp.paidBy,
-        recurringExpenseId: exp.recurringExpenseId,
-        linkedWishlistItemId: exp.linkedWishlistItemId,
-        splits: exp.splits.map(s => ({
-          id: s.id,
-          userId: s.userId,
-          user: s.user,
-          amount: s.amount,
-          customAmount: s.customAmount,
-          isCustom: s.isCustom,
-          settled: s.settled
-        })),
-        allSettled: exp.splits.every(s => s.settled),
-        createdAt: exp.createdAt
-      }))
+      expenses: expenses.map(serializeExpense)
     });
   } catch (err) {
     return serverError(res, err);
@@ -1569,7 +1582,7 @@ router.post('/', async (req, res) => {
       }
     });
 
-    return created(res, { expense });
+    return created(res, { expense: serializeExpense(expense) });
   } catch (err) {
     return serverError(res, err);
   }
@@ -1613,10 +1626,7 @@ router.get('/:id', async (req, res) => {
     }
 
     return success(res, {
-      expense: {
-        ...expense,
-        allSettled: expense.splits.every(s => s.settled)
-      }
+      expense: serializeExpense(expense)
     });
   } catch (err) {
     return serverError(res, err);
@@ -1692,11 +1702,7 @@ router.patch('/:id', async (req, res) => {
     });
 
     return success(res, {
-      expense: {
-        ...updated,
-        householdId: updated.householdId,
-        allSettled: updated.splits.every(s => s.settled)
-      }
+      expense: serializeExpense(updated)
     });
   } catch (err) {
     return serverError(res, err);
@@ -1772,6 +1778,12 @@ router.patch('/:id/settle', async (req, res) => {
     const updated = await prisma.expense.findUnique({
       where: { id },
       include: {
+        category: {
+          select: { id: true, name: true, icon: true }
+        },
+        paidBy: {
+          select: { id: true, name: true, avatarUrl: true }
+        },
         splits: {
           include: {
             user: {
@@ -1783,11 +1795,7 @@ router.patch('/:id/settle', async (req, res) => {
     });
 
     return success(res, {
-      expense: {
-        id: updated.id,
-        splits: updated.splits,
-        allSettled: updated.splits.every(s => s.settled)
-      }
+      expense: serializeExpense(updated)
     });
   } catch (err) {
     return serverError(res, err);

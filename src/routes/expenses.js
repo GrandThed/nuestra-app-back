@@ -236,14 +236,28 @@ router.delete('/categories/:id', async (req, res) => {
       return forbidden(res, 'You are not a member of this household');
     }
 
-    // Set expenses in this category to null categoryId
-    await prisma.expense.updateMany({
-      where: { categoryId: id },
-      data: { categoryId: null }
-    });
+    // Detach expenses and delete the category atomically
+    const [detached] = await prisma.$transaction([
+      prisma.expense.updateMany({
+        where: { categoryId: id },
+        data: { categoryId: null }
+      }),
+      prisma.expenseCategory.delete({
+        where: { id }
+      })
+    ]);
 
-    await prisma.expenseCategory.delete({
-      where: { id }
+    logActivity({
+      householdId: category.householdId,
+      userId: req.user.id,
+      action: 'deleted',
+      entityType: 'expense',
+      entityId: id,
+      metadata: {
+        type: 'category',
+        title: category.name,
+        expensesDetached: detached.count
+      }
     });
 
     return noContent(res);
@@ -448,6 +462,20 @@ router.post('/settle-period', async (req, res) => {
       data: { settled: true }
     });
 
+    logActivity({
+      householdId,
+      userId: req.user.id,
+      action: 'settled',
+      entityType: 'expense',
+      metadata: {
+        type: 'settle_period',
+        settledCount: result.count,
+        expensesAffected: expenseIds.length,
+        fromDate,
+        toDate
+      }
+    });
+
     return success(res, {
       settledCount: result.count,
       expensesAffected: expenseIds.length,
@@ -461,7 +489,8 @@ router.post('/settle-period', async (req, res) => {
 /**
  * POST /api/expenses/recalculate-splits
  * Recalculate expense splits based on current household member income
- * Skips expenses with custom splits
+ * Skips expenses with custom splits and expenses with any settled split
+ * (money already changed hands for those — rewriting would erase the settlement)
  */
 router.post('/recalculate-splits', async (req, res) => {
   try {
@@ -492,40 +521,60 @@ router.post('/recalculate-splits', async (req, res) => {
     const expenses = await prisma.expense.findMany({
       where,
       include: {
-        splits: { select: { isCustom: true } }
+        splits: { select: { isCustom: true, settled: true } }
       }
     });
 
-    // Filter out expenses with custom splits
-    const toRecalculate = expenses.filter(
-      e => !e.splits.some(s => s.isCustom)
-    );
+    const hasCustom = (e) => e.splits.some(s => s.isCustom);
+    const hasSettled = (e) => e.splits.some(s => s.settled);
+
+    const skippedCustom = expenses.filter(hasCustom).length;
+    const skippedSettled = expenses.filter(e => !hasCustom(e) && hasSettled(e)).length;
+    const toRecalculate = expenses.filter(e => !hasCustom(e) && !hasSettled(e));
 
     let updatedCount = 0;
 
     for (const expense of toRecalculate) {
       const newSplits = await calculateSplits(householdId, expense.amount);
 
-      // Delete old splits and create new ones
-      await prisma.expenseSplit.deleteMany({
-        where: { expenseId: expense.id }
-      });
-
-      await prisma.expenseSplit.createMany({
-        data: newSplits.map(s => ({
-          expenseId: expense.id,
-          userId: s.userId,
-          amount: s.amount,
-          settled: false
-        }))
-      });
+      // Replace splits atomically so a crash between delete and create can't
+      // leave the expense without splits
+      await prisma.$transaction([
+        prisma.expenseSplit.deleteMany({
+          where: { expenseId: expense.id }
+        }),
+        prisma.expenseSplit.createMany({
+          data: newSplits.map(s => ({
+            expenseId: expense.id,
+            userId: s.userId,
+            amount: s.amount,
+            settled: false
+          }))
+        })
+      ]);
 
       updatedCount++;
     }
 
+    logActivity({
+      householdId,
+      userId: req.user.id,
+      action: 'updated',
+      entityType: 'expense',
+      metadata: {
+        type: 'recalculate_splits',
+        updatedCount,
+        skippedCustom,
+        skippedSettled,
+        month: month ? parseInt(month) : null,
+        year: year ? parseInt(year) : null
+      }
+    });
+
     return success(res, {
       updatedCount,
-      skippedCustom: expenses.length - toRecalculate.length,
+      skippedCustom,
+      skippedSettled,
       total: expenses.length
     });
   } catch (err) {
@@ -1643,7 +1692,10 @@ router.patch('/:id', async (req, res) => {
     const { description, amount, currency, date, categoryId, receiptUrl } = req.body;
 
     const expense = await prisma.expense.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        splits: { select: { settled: true } }
+      }
     });
 
     if (!expense) {
@@ -1661,43 +1713,73 @@ router.patch('/:id', async (req, res) => {
     if (categoryId !== undefined) updateData.categoryId = categoryId;
     if (receiptUrl !== undefined) updateData.receiptUrl = receiptUrl;
 
-    // If amount changes, recalculate splits
-    if (amount !== undefined && parseFloat(amount) !== parseFloat(expense.amount)) {
+    const wasSettled = expense.splits.length > 0 && expense.splits.every(s => s.settled);
+    const amountChanged = amount !== undefined && parseFloat(amount) !== parseFloat(expense.amount);
+
+    const includeRelations = {
+      category: {
+        select: { id: true, name: true, icon: true }
+      },
+      paidBy: {
+        select: { id: true, name: true, avatarUrl: true }
+      },
+      splits: {
+        include: {
+          user: {
+            select: { id: true, name: true }
+          }
+        }
+      }
+    };
+
+    let updated;
+
+    if (amountChanged) {
+      // Amount changed: splits no longer match, so replace them (unsettled).
+      // Done atomically so a crash can't leave the expense without splits.
       updateData.amount = amount;
-
-      // Delete old splits and create new ones
-      await prisma.expenseSplit.deleteMany({
-        where: { expenseId: id }
-      });
-
       const splits = await calculateSplits(expense.householdId, amount);
-      await prisma.expenseSplit.createMany({
-        data: splits.map(s => ({
-          expenseId: id,
-          userId: s.userId,
-          amount: s.amount,
-          settled: false
-        }))
+
+      const results = await prisma.$transaction([
+        prisma.expenseSplit.deleteMany({
+          where: { expenseId: id }
+        }),
+        prisma.expenseSplit.createMany({
+          data: splits.map(s => ({
+            expenseId: id,
+            userId: s.userId,
+            amount: s.amount,
+            settled: false
+          }))
+        }),
+        prisma.expense.update({
+          where: { id },
+          data: updateData,
+          include: includeRelations
+        })
+      ]);
+      updated = results[2];
+    } else {
+      updated = await prisma.expense.update({
+        where: { id },
+        data: updateData,
+        include: includeRelations
       });
     }
 
-    const updated = await prisma.expense.update({
-      where: { id },
-      data: updateData,
-      include: {
-        category: {
-          select: { id: true, name: true, icon: true }
-        },
-        paidBy: {
-          select: { id: true, name: true, avatarUrl: true }
-        },
-        splits: {
-          include: {
-            user: {
-              select: { id: true, name: true }
-            }
-          }
-        }
+    logActivity({
+      householdId: expense.householdId,
+      userId: req.user.id,
+      action: 'updated',
+      entityType: 'expense',
+      entityId: id,
+      metadata: {
+        title: updated.description,
+        changedFields: Object.keys(updateData),
+        // A changed amount resets all splits to unsettled; record whether
+        // this reopened a previously settled expense
+        splitsReset: amountChanged,
+        reopenedSettled: amountChanged && wasSettled
       }
     });
 
@@ -1718,7 +1800,10 @@ router.delete('/:id', async (req, res) => {
     const { id } = req.params;
 
     const expense = await prisma.expense.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        splits: { select: { userId: true, amount: true, settled: true } }
+      }
     });
 
     if (!expense) {
@@ -1731,6 +1816,29 @@ router.delete('/:id', async (req, res) => {
 
     await prisma.expense.delete({
       where: { id }
+    });
+
+    // Log a full snapshot so deleted expenses can be audited/reconstructed
+    logActivity({
+      householdId: expense.householdId,
+      userId: req.user.id,
+      action: 'deleted',
+      entityType: 'expense',
+      entityId: id,
+      metadata: {
+        title: expense.description,
+        amount: parseFloat(expense.amount),
+        currency: expense.currency,
+        date: expense.date,
+        categoryId: expense.categoryId,
+        paidById: expense.paidById,
+        allSettled: expense.splits.length > 0 && expense.splits.every(s => s.settled),
+        splits: expense.splits.map(s => ({
+          userId: s.userId,
+          amount: parseFloat(s.amount),
+          settled: s.settled
+        }))
+      }
     });
 
     return noContent(res);
@@ -1774,6 +1882,20 @@ router.patch('/:id/settle', async (req, res) => {
         data: { settled }
       });
     }
+
+    logActivity({
+      householdId: expense.householdId,
+      userId: req.user.id,
+      action: 'settled',
+      entityType: 'expense',
+      entityId: id,
+      metadata: {
+        title: expense.description,
+        settled,
+        // null = all splits, otherwise the specific member affected
+        targetUserId: userId || null
+      }
+    });
 
     const updated = await prisma.expense.findUnique({
       where: { id },

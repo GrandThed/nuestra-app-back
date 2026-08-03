@@ -449,6 +449,53 @@ router.patch('/:id', async (req, res) => {
 });
 
 /**
+ * DELETE /api/wishlists/clear-checked
+ * Delete all checked items in a household (or category)
+ * NOTE: must be registered before /:id or Express matches "clear-checked" as an id
+ */
+router.delete('/clear-checked', async (req, res) => {
+  try {
+    const { householdId, categoryId } = req.query;
+
+    if (!householdId) {
+      return error(res, 'householdId is required');
+    }
+
+    if (!isMember(req.user, householdId)) {
+      return forbidden(res, 'You are not a member of this household');
+    }
+
+    const where = { householdId, checked: true };
+    if (categoryId) where.categoryId = categoryId;
+
+    // Snapshot names before deleting so the bulk delete is auditable
+    const items = await prisma.wishlistItem.findMany({
+      where,
+      select: { id: true, name: true }
+    });
+
+    const result = await prisma.wishlistItem.deleteMany({ where });
+
+    logActivity({
+      householdId,
+      userId: req.user.id,
+      action: 'deleted',
+      entityType: 'wishlist',
+      metadata: {
+        type: 'clear_checked',
+        categoryId: categoryId || null,
+        deletedCount: result.count,
+        itemNames: items.map(i => i.name)
+      }
+    });
+
+    return success(res, { deletedCount: result.count });
+  } catch (err) {
+    return serverError(res, err);
+  }
+});
+
+/**
  * DELETE /api/wishlists/:id
  * Delete a wishlist item
  */
@@ -472,34 +519,20 @@ router.delete('/:id', async (req, res) => {
       where: { id }
     });
 
+    logActivity({
+      householdId: item.householdId,
+      userId: req.user.id,
+      action: 'deleted',
+      entityType: 'wishlist',
+      entityId: id,
+      metadata: {
+        name: item.name,
+        price: item.price ? parseFloat(item.price) : null,
+        categoryId: item.categoryId
+      }
+    });
+
     return noContent(res);
-  } catch (err) {
-    return serverError(res, err);
-  }
-});
-
-/**
- * DELETE /api/wishlists/clear-checked
- * Delete all checked items in a household (or category)
- */
-router.delete('/clear-checked', async (req, res) => {
-  try {
-    const { householdId, categoryId } = req.query;
-
-    if (!householdId) {
-      return error(res, 'householdId is required');
-    }
-
-    if (!isMember(req.user, householdId)) {
-      return forbidden(res, 'You are not a member of this household');
-    }
-
-    const where = { householdId, checked: true };
-    if (categoryId) where.categoryId = categoryId;
-
-    const result = await prisma.wishlistItem.deleteMany({ where });
-
-    return success(res, { deletedCount: result.count });
   } catch (err) {
     return serverError(res, err);
   }
